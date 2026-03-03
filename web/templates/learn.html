@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observability 101 - Pingtym Insights</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <style>
+        :root {
+            --primary: #10b981;
+            --bg: #050505;
+            --card: #0f0f0f;
+            --text: #f8fafc;
+            --text-muted: #a1a1aa;
+            --border: #1f1f1f;
+        }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container { max-width: 800px; margin: 4rem auto; padding: 0 1.5rem; }
+        .nav { padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+        .logo { display: flex; align-items: center; gap: 0.5rem; text-decoration: none; color: white; }
+        .back-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+        h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; letter-spacing: -0.025em; }
+        .intro { font-size: 1.25rem; color: var(--text-muted); margin-bottom: 3rem; }
+        .term-card { background: var(--card); border: 1px solid var(--border); padding: 2rem; border-radius: 1rem; margin-bottom: 2rem; }
+        .term-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+        .term-icon { width: 40px; height: 40px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; }
+        .term-title { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+        .analogy-box { background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--primary); padding: 1rem 1.5rem; border-radius: 0 0.5rem 0.5rem 0; margin: 1.5rem 0; font-style: italic; }
+        footer { text-align: center; margin-top: 4rem; padding: 2rem; color: var(--text-muted); font-size: 0.875rem; border-top: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/" class="logo">
+            <div style="width: 28px; height: 28px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </div>
+            <div style="font-weight: 800;">Pingtym <span style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>
+        </a>
+        <a href="/" class="back-link">← Back to Dashboard</a>
+    </div>
+
+    <div class="container">
+        <h1>Observability 101</h1>
+        <p class="intro">Ever wondered what all those "ms" numbers actually mean? Let's break down how the internet works using simple analogies.</p>
+
+        <div class="term-card">
+            <div class="term-header">
+                <div class="term-icon">D</div>
+                <div class="term-title">DNS Resolution</div>
+            </div>
+            <p>Computers don't understand names like <code>google.com</code>; they only understand numbers called IP addresses. DNS is the system that translates names into numbers.</p>
+            <div class="analogy-box">
+                "Think of DNS like looking up a friend's name in a phonebook to find their number before you can call them."
+            </div>
+        </div>
+
+        <div class="term-card">
+            <div class="term-header">
+                <div class="term-icon">C</div>
+                <div class="term-title">Connect (TCP)</div>
+            </div>
+            <p>Once we have the number, we need to pick up the phone and establish a line. This is the "Connection" phase where your computer and the server say hello.</p>
+            <div class="analogy-box">
+                "It's like dialing the number and waiting for the other person to say 'Hello?'"
+            </div>
+        </div>
+
+        <div class="term-card">
+            <div class="term-header">
+                <div class="term-icon">T</div>
+                <div class="term-title">TLS Handshake</div>
+            </div>
+            <p>On the modern web, everything is encrypted for your safety. TLS is the process where both sides agree on a 'secret code' to talk in so no one can overhear.</p>
+            <div class="analogy-box">
+                "Think of it like two spies meeting in a park and exchanging a secret code-book before they start whispering."
+            </div>
+        </div>
+
+        <div class="term-card">
+            <div class="term-header">
+                <div class="term-icon">B</div>
+                <div class="term-title">TTFB (Time to First Byte)</div>
+            </div>
+            <p>This is often the most important number. It's the time it takes for the server to actually process your request and send the very first piece of information back.</p>
+            <div class="analogy-box">
+                "Imagine ordering food at a restaurant. TTFB is the time between you handing the menu to the waiter and the waiter bringing out your first appetizer."
+            </div>
+        </div>
+
+        <div class="term-card">
+            <div class="term-header">
+                <div class="term-icon">K</div>
+                <div class="term-title">Keep-Alive</div>
+            </div>
+            <p>Pingtym uses 'World Class' connection reuse. Instead of hanging up the phone and redialing every minute, we keep the line open.</p>
+            <div class="analogy-box">
+                "It's like staying on the line with a friend instead of hanging up and calling back every time you have one more thing to say."
+            </div>
+        </div>
+
+        <footer>
+            Built with ❤️ by Favour Orukpe (alphadevking) for the Observability Community.
+        </footer>
+    </div>
+</body>
+</html>

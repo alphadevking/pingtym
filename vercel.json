@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "cmd/server/main.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/favicon.ico",
+      "dest": "cmd/server/main.go"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "cmd/server/main.go"
+    }
+  ]
+}
