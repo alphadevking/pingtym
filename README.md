@@ -56,6 +56,17 @@ go run cmd/server/main.go
 Your dashboard will be ready at `http://localhost:8080`.
 
 ---
+
+### 🤝 Open for Collaboration
+Pingtym Insights is an open-source project and we welcome contributions! Whether you're fixing bugs, adding new features, or improving documentation, your help is appreciated. 
+
+- **Found a bug?** Open an issue.
+- **Have a feature idea?** Start a discussion.
+- **Want to code?** Submit a pull request.
+
+Let's build the future of precision observability together.
+
+---
 <div align="center">
-Built with ❤️ by <b>Favour Orukpe (alphadevking)</b> for Site Reliability Engineers who demand zero-latency insights.
+Built with ❤️ for Site Reliability Engineers who demand zero-latency insights.
 </div>
