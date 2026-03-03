@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" width="80" height="80" />
+<img src="./web/assets/logo.svg" width="80" height="80" />
 
 # Pingtym Insights
 **The Precision Observability Platform for Modern Infrastructure.**

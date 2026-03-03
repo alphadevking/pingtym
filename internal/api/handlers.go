@@ -64,6 +64,7 @@ func RegisterHandlers() {
 	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/learn", handleLearn)
 	http.HandleFunc("/favicon.ico", handleFavicon)
+	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(web.TemplateFS))))
 	http.HandleFunc("/add-monitor", handleAddMonitor)
 	http.HandleFunc("/delete-monitor", handleDeleteMonitor)
 	http.HandleFunc("/api/cron", handleCron)
