@@ -43,6 +43,12 @@ func RegisterHandlers() {
 		http.HandleFunc("/", handleIndex)
 		http.HandleFunc("/learn", handleLearn)
 		http.HandleFunc("/favicon.ico", handleFavicon)
+		http.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFileFS(w, r, web.TemplateFS, "assets/robots.txt")
+		})
+		http.HandleFunc("/sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFileFS(w, r, web.TemplateFS, "assets/sitemap.xml")
+		})
 		http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(web.TemplateFS))))
 		http.HandleFunc("/add-monitor", handleAddMonitor)
 		http.HandleFunc("/delete-monitor", handleDeleteMonitor)

@@ -9,7 +9,7 @@
 [![HTMX](https://img.shields.io/badge/HTMX-1.9-10b981?style=for-the-badge)](https://htmx.org)
 [![Turso](https://img.shields.io/badge/Database-Turso-10b981?style=for-the-badge&logo=turso)](https://turso.tech)
 [![Vercel](https://img.shields.io/badge/Vercel-Ready-10b981?style=for-the-badge&logo=vercel)](https://vercel.com)
-[![Theme](https://img.shields.io/badge/Theme-Almost%20Black-050505?style=for-the-badge)](https://github.com/Alphadevking/Pingtym)
+[![Theme](https://img.shields.io/badge/Theme-Almost%20Black-050505?style=for-the-badge)](https://github.com/alphadevking/pingtym)
 [![License](https://img.shields.io/badge/License-MIT-10b981?style=for-the-badge)](LICENSE)
 
 </div>
@@ -46,7 +46,7 @@ Pingtym Insights doesn't just "ping" your services; it performs deep network tra
 
 **1. Clone and enter the workspace:**
 ```bash
-git clone https://github.com/Alphadevking/Pingtym.git
+git clone https://github.com/alphadevking/Pingtym.git
 cd pingtym
 ```
 

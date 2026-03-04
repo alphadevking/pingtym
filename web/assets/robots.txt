@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /learn
+Disallow: /api/
+Disallow: /delete-monitor
+Disallow: /add-monitor
+
+Sitemap: https://pingtym.vercel.app/assets/sitemap.xml

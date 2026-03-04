@@ -3,13 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Learn Observability - Pingtym Insights</title>
+    <title>Observability Mastery - Learn Network Tracing & SRE Metrics</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Master the technicalities of modern observability. Learn how DNS, TLS handshakes, TTFB, and SaaS correlation impact infrastructure performance.">
+    <meta name="keywords" content="observability education, network tracing, SRE metrics, DNS resolution, TLS handshake, TTFB explained, SaaS health monitoring">
+    <meta name="author" content="alphadevking">
+    <link rel="canonical" href="https://pingtym.vercel.app/learn">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://pingtym.vercel.app/learn">
+    <meta property="og:title" content="Observability Mastery - Learn Network Tracing & SRE Metrics">
+    <meta property="og:description" content="Deep dive into the wire-level metrics that power modern infrastructure. Understand the 'why' behind the numbers.">
+    <meta property="og:image" content="https://pingtym.vercel.app/assets/logo.svg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary">
+    <meta property="twitter:url" content="https://pingtym.vercel.app/learn">
+    <meta property="twitter:title" content="Observability Mastery - Learn Network Tracing & SRE Metrics">
+    <meta property="twitter:description" content="Master the wire-level metrics of network performance. DNS, TLS, TTFB, and more explained.">
+    <meta property="twitter:image" content="https://pingtym.vercel.app/assets/logo.svg">
+
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-    <script src="https://unpkg.com/htmx.org@1.9.10"
-        integrity="sha384-D1KtGzAtvXM+96clEIZsuUahSKBnQHQHBNMSZSkvtSMLcbbM9ENp5hiNQp9ZPxSF" crossorigin="anonymous"
-        defer></script>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css"
-        integrity="sha384-S79Ofm9Srtid99skpwnvpSskpwSP99Ofm9Srtid99skpwnvpSskpwSP99Ofm9S" crossorigin="anonymous">
+    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1KtGzAtvXM+96clEIZsuUahSKBnQHQHBNMSZSkvtSMLcbbM9ENp5hiNQp9ZPxSF" crossorigin="anonymous" defer></script>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" integrity="sha384-S79Ofm9Srtid99skpwnvpSskpwSP99Ofm9Srtid99skpwnvpSskpwSP99Ofm" crossorigin="anonymous">
     <style>
         :root {
             --primary: #10b981;
@@ -98,9 +116,9 @@
             <div class="term-card">
                 <div class="term-header">
                     <div class="term-icon">B</div>
-                    <div class="term-title">TTFB (Processing)</div>
+                    <div class="term-title">TTFB (Emerald)</div>
                 </div>
-                <p>The time your server spends 'thinking' before sending the first byte. Captured via <code>GotFirstResponseByte</code> hook.</p>
+                <p>The time your server spends 'thinking' before sending the first byte. This is the ultimate measure of server-side efficiency.</p>
                 <div class="analogy-box">"Time between ordering and the appetizer arriving."</div>
                 <div class="tech-detail">request.Send &rarr; trace.GotFirstResponseByte</div>
             </div>
