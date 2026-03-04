@@ -1,44 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Observability Mastery - Learn Network Tracing & SRE Metrics</title>
+    <title>Observability Masterclass | Pingtym Insights</title>
 
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Master the technicalities of modern observability. Learn how DNS, TLS handshakes, TTFB, and SaaS correlation impact infrastructure performance.">
-    <meta name="keywords" content="observability education, network tracing, SRE metrics, DNS resolution, TLS handshake, TTFB explained, SaaS health monitoring">
+    <meta name="description"
+        content="Master the technicalities of modern observability. Learn how DNS, TCP, TLS, TTFB, and Transfer delivery impact infrastructure performance.">
+    <meta name="keywords"
+        content="observability education, network tracing, SRE metrics, DNS resolution, TLS handshake, TTFB explained, SaaS health monitoring, network latency">
     <meta name="author" content="alphadevking">
     <link rel="canonical" href="https://pingtym.vercel.app/learn">
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://pingtym.vercel.app/learn">
-    <meta property="og:title" content="Observability Mastery - Learn Network Tracing & SRE Metrics">
-    <meta property="og:description" content="Deep dive into the wire-level metrics that power modern infrastructure. Understand the 'why' behind the numbers.">
+    <meta property="og:title" content="Observability Masterclass | Pingtym Insights">
+    <meta property="og:description"
+        content="Deep dive into the wire-level metrics that power modern infrastructure. Understand the 'why' behind the numbers.">
     <meta property="og:image" content="https://pingtym.vercel.app/assets/logo.svg">
 
     <!-- Twitter -->
-    <meta property="twitter:card" content="summary">
+    <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://pingtym.vercel.app/learn">
-    <meta property="twitter:title" content="Observability Mastery - Learn Network Tracing & SRE Metrics">
-    <meta property="twitter:description" content="Master the wire-level metrics of network performance. DNS, TLS, TTFB, and more explained.">
+    <meta property="twitter:title" content="Observability Masterclass | Pingtym Insights">
+    <meta property="twitter:description"
+        content="Master the wire-level metrics of network performance. DNS, TLS, TTFB, and Transfer explained.">
     <meta property="twitter:image" content="https://pingtym.vercel.app/assets/logo.svg">
 
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1KtGzAtvXM+96clEIZsuUahSKBnQHQHBNMSZSkvtSMLcbbM9ENp5hiNQp9ZPxSF" crossorigin="anonymous" defer></script>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" integrity="sha384-S79Ofm9Srtid99skpwnvpSskpwSP99Ofm9Srtid99skpwnvpSskpwSP99Ofm" crossorigin="anonymous">
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+
     <style>
         :root {
             --primary: #10b981;
-            --primary-light: #ecfdf5;
-            --bg: #050505;
-            --card: #0f0f0f;
-            --text: #f8fafc;
-            --text-muted: #a1a1aa;
-            --border: #1f1f1f;
-            --nav-bg: #0f0f0f;
+            --primary-glow: rgba(16, 185, 129, 0.4);
+            --bg: #030303;
+            --card: rgba(15, 15, 15, 0.7);
+            --text: #ffffff;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --accent: #34d399;
         }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             background: var(--bg);
@@ -46,115 +58,493 @@
             margin: 0;
             line-height: 1.6;
             -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
         }
+
+        /* Background Glow */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% -20%, var(--primary-glow) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
         .nav {
-            background: var(--nav-bg);
+            background: rgba(3, 3, 3, 0.8);
+            backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border);
-            padding: 0.75rem 1.5rem;
+            padding: 1rem 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
             position: sticky;
             top: 0;
-            z-index: 50;
+            z-index: 100;
         }
-        .container { max-width: 900px; margin: 4rem auto; padding: 0 1.5rem; }
-        h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; letter-spacing: -0.025em; }
-        .intro { font-size: 1.25rem; color: var(--text-muted); margin-bottom: 3rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; }
-        .term-card { background: var(--card); border: 1px solid var(--border); padding: 2rem; border-radius: 1rem; }
-        .term-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-        .term-icon { width: 40px; height: 40px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; }
-        .term-title { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-        .analogy-box { background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--primary); padding: 1rem 1.5rem; border-radius: 0 0.5rem 0.5rem 0; margin: 1.5rem 0; font-style: italic; }
-        .tech-detail { font-family: monospace; font-size: 0.85rem; background: #000; padding: 1rem; border-radius: 0.5rem; color: #10b981; margin-top: 1rem; border: 1px solid #1f1f1f; }
-        footer { text-align: center; margin-top: 4rem; padding: 2rem; color: var(--text-muted); font-size: 0.875rem; border-top: 1px solid var(--border); }
-        .back-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .logo-box {
+            width: 32px;
+            height: 32px;
+            background: var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 6rem auto;
+            padding: 0 2rem;
+        }
+
+        .hero {
+            text-align: center;
+            margin-bottom: 8rem;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 900;
+            margin: 0;
+            letter-spacing: -0.05em;
+            background: linear-gradient(to bottom, #fff 0%, #a1a1aa 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 1.5rem auto;
+        }
+
+        .heartbeat {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            margin-bottom: 1rem;
+        }
+
+        .heartbeat-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.5);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .lifecycle-nav {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 4rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+        }
+
+        .nav-step {
+            padding: 0.5rem 1rem;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-step:hover {
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .lifecycle-section {
+            margin-bottom: 10rem;
+            scroll-margin-top: 100px;
+        }
+
+        .section-tag {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0 0 2rem 0;
+            letter-spacing: -0.03em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 3rem;
+            align-items: start;
+        }
+
+        @media (max-width: 850px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .analogy {
+            background: rgba(16, 185, 129, 0.05);
+            border-left: 3px solid var(--primary);
+            padding: 1.5rem;
+            border-radius: 0 1rem 1rem 0;
+            margin: 2rem 0;
+        }
+
+        .analogy-label {
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .code-block {
+            background: #000;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            color: #d1d5db;
+            position: relative;
+        }
+
+        .code-header {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .highlight {
+            color: var(--primary);
+        }
+
+        .comment {
+            color: #4b5563;
+        }
+
+        footer {
+            text-align: center;
+            padding: 6rem 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: #000;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.875rem;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
     </style>
 </head>
+
 <body>
-    <div class="nav">
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.5rem;">
-                <div style="width: 28px; height: 28px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                </div>
-                <div style="font-size: 1.1rem; font-weight: 800;">Pingtym <span style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>
-            </a>
+
+    <nav class="nav">
+        <a href="/" class="logo">
+            <div class="logo-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+            </div>
+            <div style="font-weight: 800; font-size: 1.2rem;">Pingtym <span
+                    style="font-weight: 400; color: var(--primary); font-style: italic;">Masterclass</span></div>
+        </a>
+        <div style="display: flex; gap: 2rem; align-items: center;">
+            <a href="/"
+                style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; font-weight: 600;">Dashboard</a>
+            <a href="/" class="btn">Start Monitoring</a>
         </div>
-        <div style="display: flex; gap: 1.5rem; align-items: center;">
-            <a href="/learn" style="color: var(--primary); text-decoration: none; font-size: 0.875rem; font-weight: 600;">Learn</a>
-            <a href="/" class="back-link">← Dashboard</a>
-        </div>
-    </div>
+    </nav>
 
     <div class="container">
-        <h1>Observability Mastery</h1>
-        <p class="intro">Understand the technical intricacies behind the metrics. Pingtym Insights uses high-precision algorithms to decode how the web actually works.</p>
-
-        <div class="grid">
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">D</div>
-                    <div class="term-title">DNS Resolution</div>
-                </div>
-                <p>Translates human-readable names into IP addresses. Pingtym tracks <code>DNSStart</code> and <code>DNSDone</code> events to isolate slow registrar lookups.</p>
-                <div class="analogy-box">"Like looking up a name in a phonebook."</div>
-                <div class="tech-detail">trace.DNSStart &rarr; trace.DNSDone</div>
+        <header class="hero">
+            <div class="heartbeat">
+                <div class="heartbeat-dot"></div>
+                Monotonic High-Precision Trace
             </div>
+            <h1>Observability Mastery</h1>
+            <p>Go beyond "Up" or "Down". Understand the physics of the web through wire-level metrics and rhythmic
+                correlation.</p>
+        </header>
 
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">T</div>
-                    <div class="term-title">TLS Handshake</div>
-                </div>
-                <p>Negotiates secure encryption keys. We measure the time between the TCP connection and the final <code>TLSHandshakeDone</code> event.</p>
-                <div class="analogy-box">"Spies exchanging secret code-books."</div>
-                <div class="tech-detail">trace.TLSHandshakeStart &rarr; Done</div>
-            </div>
+        <nav class="lifecycle-nav">
+            <a href="#dns" class="nav-step">1. Discovery</a>
+            <a href="#handshake" class="nav-step">2. Handshake</a>
+            <a href="#processing" class="nav-step">3. Processing</a>
+            <a href="#delivery" class="nav-step">4. Delivery</a>
+            <a href="#validation" class="nav-step">5. Validation</a>
+            <a href="#context" class="nav-step">6. Context</a>
+        </nav>
 
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">B</div>
-                    <div class="term-title">TTFB (Emerald)</div>
-                </div>
-                <p>The time your server spends 'thinking' before sending the first byte. This is the ultimate measure of server-side efficiency.</p>
-                <div class="analogy-box">"Time between ordering and the appetizer arriving."</div>
-                <div class="tech-detail">request.Send &rarr; trace.GotFirstResponseByte</div>
-            </div>
+        <!-- DNS Section -->
+        <section id="dns" class="lifecycle-section">
+            <span class="section-tag">Phase 01: Discovery</span>
+            <h2>DNS Resolution</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>The journey begins with a question. DNS resolution is the process of translating a human-friendly
+                        domain name (like <code>example.com</code>) into a machine-readable IP address.</p>
+                    <p>Pingtym measures the exact duration from the moment the lookup is initiated to the moment the
+                        Resolver returns the final record. High DNS latency often points to misconfigured nameservers or
+                        sluggish TTL propagation.</p>
 
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">K</div>
-                    <div class="term-title">Keep-Alive Pooling</div>
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        Looking up a friend's address in a global phonebook before you can even leave your house.
+                    </div>
                 </div>
-                <p>Instead of reconnecting, we reuse open sockets. This identifies the 'Warm Start' performance of your app during real user sessions.</p>
-                <div class="analogy-box">"Staying on the line with a friend."</div>
-                <div class="tech-detail">http.Transport.MaxIdleConns = 100</div>
+                <div class="card">
+                    <div class="code-header"><span>internal/monitor/monitor.go</span><span>Go 1.22</span></div>
+                    <div class="code-block">
+                        <span class="highlight">DNSStart</span>: <span class="comment">// Record timestamp</span>
+                        <span class="highlight">DNSDone</span>: <span class="comment">// Subtract start</span>
+                        <br>
+                        <span class="comment">// Pingtym uses:</span>
+                        net.DefaultResolver.LookupIP(ctx, "ip", host)
+                    </div>
+                </div>
             </div>
+        </section>
 
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">S</div>
-                    <div class="term-title">SaaS Correlation</div>
-                </div>
-                <p>We correlate your local Degraded status with upstream provider JSON APIs. This tells you if the internet is broken, or just your code.</p>
-                <div class="tech-detail">GET /api/v2/summary.json</div>
-            </div>
+        <!-- Handshake Section -->
+        <section id="handshake" class="lifecycle-section">
+            <span class="section-tag">Phase 02: The Handshake</span>
+            <h2>TCP & TLS Negotiation</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>Connection isn't just a switch; it's a conversation. First, the <strong>TCP Three-Way
+                            Handshake</strong> establishes a reliable data stream (SYN, SYN-ACK, ACK).</p>
+                    <p>Then, the <strong>TLS Handshake</strong> negotiates encryption keys. If your TLS metric is high,
+                        your server might be struggling with complex cipher suites or a lack of hardware acceleration
+                        for SSL processing.</p>
 
-            <div class="term-card">
-                <div class="term-header">
-                    <div class="term-icon">M</div>
-                    <div class="term-title">Monotonic Timing</div>
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        Knocking on a door, hearing "Who is it?", and then exchanging a secret code-book before you're
+                        allowed to talk.
+                    </div>
                 </div>
-                <p>Standard clocks can drift. Pingtym uses hardware-level monotonic timers to measure physical time elapsed with sub-millisecond accuracy.</p>
-                <div class="tech-detail">time.Since() uses Monotonic Clock</div>
+                <div class="card">
+                    <div class="code-header"><span>Trace Events</span><span>Hardware Timed</span></div>
+                    <div class="code-block">
+                        <span class="highlight">ConnectStart</span> <span class="comment">&rarr;</span> <span
+                            class="highlight">ConnectDone</span>
+                        <span class="highlight">TLSHandshakeStart</span> <span class="comment">&rarr;</span> <span
+                            class="highlight">TLSHandshakeDone</span>
+                        <br>
+                        <span class="comment">// Measures physical wire-time</span>
+                    </div>
+                </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Processing Section -->
+        <section id="processing" class="lifecycle-section">
+            <span class="section-tag">Phase 03: Server Processing</span>
+            <h2>Latency (TTFB)</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>This is the "Emerald" metric. <strong>Time to First Byte (TTFB)</strong> measures the internal
+                        delay between receiving a request and generating the very first byte of the response.</p>
+                    <p>This isolates your application's performance from the network. If TTFB is high but DNS/TCP are
+                        low, the problem is inside your code—likely a slow database query or a heavy middleware stack.
+                    </p>
+
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        The time between the waiter taking your order and the first appetizer hitting the table.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="code-header"><span>Server Performance</span><span>Backend Metric</span></div>
+                    <div class="code-block">
+                        <span class="highlight">GotFirstResponseByte</span>
+                        <br>
+                        <span class="comment">// Pure Server Efficiency</span>
+                        TTFB = ttfbDone.Sub(start)
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Delivery Section -->
+        <section id="delivery" class="lifecycle-section">
+            <span class="section-tag">Phase 04: Payload Delivery</span>
+            <h2>Transfer Time</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>Once the processing is done, the data must travel. <strong>Transfer Time</strong> is the duration
+                        spent downloading the actual body content after the first byte has arrived.</p>
+                    <p>High transfer times usually indicate large asset sizes (images, heavy JS bundles) or limited
+                        bandwidth between the server and the visitor.</p>
+
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        The time it takes to actually eat the entire 5-course meal after it has been served.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="code-header"><span>Bandwidth Metric</span><span>Network Load</span></div>
+                    <div class="code-block">
+                        <span class="comment">// Total duration minus initial wait</span>
+                        transfer = FullDuration - TTFB
+                        <br>
+                        <span class="highlight">io.Copy(io.Discard, resp.Body)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Validation Section -->
+        <section id="validation" class="lifecycle-section">
+            <span class="section-tag">Phase 05: Identity Validation</span>
+            <h2>SSL Certificates</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>Trust is transient. Pingtym proactively monitors your SSL certificate expiry dates to prevent
+                        "Security Warning" screens that kill user trust.</p>
+                    <p>We check the <code>NotAfter</code> field of your peer certificates and cross-reference them with
+                        established Certificate Authorities to ensure your chain of trust is active and valid.</p>
+
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        Checking the expiration date on your passport before a big international flight.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="code-header"><span>Security Audit</span><span>Trust Chain</span></div>
+                    <div class="code-block">
+                        <span class="comment">// Peer Certificate Check</span>
+                        certs = conn.ConnectionState()
+                        expiry = certs[0].<span class="highlight">NotAfter</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Context Section -->
+        <section id="context" class="lifecycle-section">
+            <span class="section-tag">Phase 06: Global Correlation</span>
+            <h2>SaaS Context</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>Infrastructure never exists in a vacuum. Pingtym correlates your local outages with the official
+                        status pages of global providers like AWS, Cloudflare, and GitHub.</p>
+                    <p>By ingesting <code>summary.json</code> feeds from statuspage.io and other providers, we help you
+                        distinguish between a localized bug and a massive backbone failure.</p>
+
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        Checking the city-wide news to see if the power is out everywhere or if you just blew a fuse.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="code-header"><span>Correlation Engine</span><span>External API</span></div>
+                    <div class="code-block">
+                        <span class="highlight">/api/v2/summary.json</span>
+                        <br>
+                        <span class="comment">// Correlates Infrastructure</span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <footer>
-            Built with ❤️ for the Observability Community.
+            Built with ❤️ for the SRE and Observability Community.<br>
+            &copy; 2026 Pingtym Insights. Precision First.
         </footer>
     </div>
+
+    <script>
+        // Smooth scroll for nav steps
+        document.querySelectorAll('.nav-step').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
 </body>
+
 </html>

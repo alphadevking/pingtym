@@ -646,7 +646,7 @@
                 <thead>
                     <tr>
                         <th style="width: 35%;">Endpoint</th>
-                        <th>TTFB (Emerald)</th>
+                        <th>Latency (Emerald)</th>
                         <th>History</th>
                         <th>Status</th>
                         <th></th>
@@ -700,8 +700,9 @@
                                             .LastChecked.Valid}}{{.AvgLatency}}ms{{else}}--{{end}}</div>
                                         {{if .LastResult.Up}}<div
                                             style="font-size: 0.7rem; color: var(--primary); font-weight: 600;">
-                                            Transfer: {{minus .LastResult.FullDuration.Milliseconds
-                                            .LastResult.TTFB.Milliseconds}}ms</div>{{end}}
+                                            Latency: {{.LastResult.TTFB.Milliseconds}}ms • Transfer: {{minus
+                                            .LastResult.FullDuration.Milliseconds .LastResult.TTFB.Milliseconds}}ms
+                                        </div>{{end}}
                                     </div>
                                     <svg width="80" height="24" viewBox="0 0 100 30" class="sparkline">
                                         <polyline points="{{sparkPoints .LatencyHistory .MaxLatency 100 30}}" />
