@@ -7,6 +7,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-10b981?style=for-the-badge&logo=go)](https://golang.org)
 [![HTMX](https://img.shields.io/badge/HTMX-1.9-10b981?style=for-the-badge)](https://htmx.org)
+[![Turso](https://img.shields.io/badge/Database-Turso-10b981?style=for-the-badge&logo=turso)](https://turso.tech)
 [![Vercel](https://img.shields.io/badge/Vercel-Ready-10b981?style=for-the-badge&logo=vercel)](https://vercel.com)
 [![Theme](https://img.shields.io/badge/Theme-Almost%20Black-050505?style=for-the-badge)](https://github.com/Alphadevking/Pingtym)
 [![License](https://img.shields.io/badge/License-MIT-10b981?style=for-the-badge)](LICENSE)
@@ -25,7 +26,8 @@ Pingtym Insights doesn't just "ping" your services; it performs deep network tra
 -   **Security Governance:** Automated SSL/TLS expiry tracking with proactive 30-day renewal warnings.
 -   **SaaS Correlation:** Real-time health synchronization with upstream providers like MongoDB, GitHub, and Cloudflare.
 -   **Instant Registry Search:** Zero-latency infrastructure filtering as you type.
--   **Isolated Multi-Tenancy:** Secure, persistent browser sessions ensured via encrypted UUIDs.
+-   **Isolated Multi-Tenancy:** Secure, persistent sessions with encrypted UUIDs.
+-   **Proxy-Aware IP Extraction:** Optimized for Istio, Envoy, and Vercel edge networks.
 
 ---
 
@@ -35,21 +37,24 @@ Pingtym Insights doesn't just "ping" your services; it performs deep network tra
 | :--- | :--- |
 | **Engine** | High-concurrency Go (Golang) |
 | **Frontend** | HTMX + Vanilla CSS (Emerald Identity) |
-| **Database** | SQLite with WAL (Write-Ahead Logging) |
+| **Database** | Turso (libSQL) / SQLite with WAL |
 | **Deployment** | Vercel Serverless Ready |
 
 ---
 
 ### 🚀 Getting Started
 
-Launch the full observability suite in seconds:
-
+**1. Clone and enter the workspace:**
 ```bash
-# Clone and enter the workspace
 git clone https://github.com/Alphadevking/Pingtym.git
 cd pingtym
+```
 
-# Launch the engine
+**2. Configure Environment:**
+Copy `.env.example` to `.env` and set your `SESSION_SECRET`. For production persistence, provide your Turso database credentials.
+
+**3. Launch the engine:**
+```bash
 go run cmd/server/main.go
 ```
 
