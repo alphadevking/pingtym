@@ -35,11 +35,10 @@ func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Append to the END (standard timeline: oldest...newest)
 	history := s.MonitorHistory[id]
 	history = append(history, status)
 	if len(history) > 30 {
-		history = history[1:] // Drop oldest
+		history = history[1:]
 	}
 	s.MonitorHistory[id] = history
 
@@ -50,7 +49,7 @@ func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
 	}
 	latencies = append(latencies, val)
 	if len(latencies) > 20 {
-		latencies = latencies[1:] // Drop oldest
+		latencies = latencies[1:]
 	}
 	s.LatencyHistory[id] = latencies
 
@@ -248,21 +247,24 @@ func PerformMonitorCheck(m *db.Monitor) {
 		slog.Error("Failed to save check log", "id", m.ID, "error", err)
 	}
 
+	// LATENCY FIX: Move SaaS checks off the critical monitoring path
 	if m.StatusPageURL.Valid && m.StatusPageURL.String != "" {
-		statuses, err := CheckSaaSStatus(m.ID, m.StatusPageURL.String)
-		if err != nil {
-			slog.Warn("Failed to check SaaS status", "id", m.ID, "url", m.StatusPageURL.String, "error", err)
-		} else {
+		go func(id int, pageURL string) {
+			statuses, err := CheckSaaSStatus(id, pageURL)
+			if err != nil {
+				slog.Warn("Failed to check SaaS status", "id", id, "url", pageURL, "error", err)
+				return
+			}
 			for _, s := range statuses {
-				State.updateSaaSState(m.ID, s.ServiceName, s.Status)
-				if err := db.UpdateSaaSStatus(m.ID, s.ServiceName, s.Status, s.Impact, s.LatestFix); err != nil {
-					slog.Error("Failed to update SaaS status", "id", m.ID, "service", s.ServiceName, "error", err)
+				State.updateSaaSState(id, s.ServiceName, s.Status)
+				if err := db.UpdateSaaSStatus(id, s.ServiceName, s.Status, s.Impact, s.LatestFix); err != nil {
+					slog.Error("Failed to update SaaS status", "id", id, "service", s.ServiceName, "error", err)
 				}
-				if err := db.SaveSaaSStatusLog(m.ID, s.ServiceName, s.Status); err != nil {
-					slog.Error("Failed to save SaaS status log", "id", m.ID, "service", s.ServiceName, "error", err)
+				if err := db.SaveSaaSStatusLog(id, s.ServiceName, s.Status); err != nil {
+					slog.Error("Failed to save SaaS status log", "id", id, "service", s.ServiceName, "error", err)
 				}
 			}
-		}
+		}(m.ID, m.StatusPageURL.String)
 	}
 }
 

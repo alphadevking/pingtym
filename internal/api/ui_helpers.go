@@ -12,23 +12,29 @@ func GenerateSparkline(latencies []int, maxLat int, width, height int) string {
 		return ""
 	}
 
-	// For a consistent width, we always act as if we have 20 slots.
-	// Data starts from the left (index 0).
+	// Precision Fix: Use float64 for steps to ensure the sparkline reaches the right edge perfectly
 	points := []string{}
-	stepX := width / 19 // 20 slots = 19 gaps
-	
+	stepX := float64(width) / 19.0 // 20 slots = 19 gaps
+
 	for i, val := range latencies {
-		if i >= 20 { break }
-		if val < 0 { continue }
-		
-		x := i * stepX
+		if i >= 20 {
+			break
+		}
+		if val <= 0 {
+			continue
+		} // 0 = monitor was down, skip to show a visible gap
+
+		x := float64(i) * stepX
 		ratio := float64(val) / float64(maxLat)
-		if ratio > 1.0 { ratio = 1.0 }
+		if ratio > 1.0 {
+			ratio = 1.0
+		}
 		y := float64(height) - (ratio * float64(height) * 0.8)
-		
-		points = append(points, fmt.Sprintf("%d,%.1f", x, y))
+
+		// Use %.1f for cleaner SVG paths without losing precision
+		points = append(points, fmt.Sprintf("%.1f,%.1f", x, y))
 	}
-	
+
 	return strings.Join(points, " ")
 }
 
@@ -50,13 +56,17 @@ func GetTemplateFuncs() map[string]interface{} {
 			}
 			return res
 		},
-		"multiply":   func(a, b int) int { return a * b },
-		"divide":     func(a, b int) int { if b == 0 { return a }; return a / b },
-		"minus":      func(a, b int) int { return a - b },
+		"multiply": func(a, b int64) int64 { return a * b },
+		"divide": func(a, b int64) int64 {
+			if b == 0 {
+				return a
+			}
+			return a / b
+		},
+		"minus":       func(a, b int64) int64 { return a - b },
 		"sparkPoints": GenerateSparkline,
 		"formatLat":   FormatLatency,
 		"padHistory": func(history []int, size int) []int {
-			// Pad at the END so data starts from the left
 			res := make([]int, size)
 			for i := range res {
 				res[i] = -1

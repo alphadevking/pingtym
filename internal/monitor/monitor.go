@@ -17,7 +17,8 @@ import (
 
 type CheckResult struct {
 	Up           bool
-	Latency      time.Duration
+	Latency      time.Duration // This will be used as TTFB (Server Response)
+	FullDuration time.Duration // This includes body download time
 	DNS          time.Duration
 	Connect      time.Duration
 	TLS          time.Duration
@@ -59,7 +60,6 @@ var sharedClient = &http.Client{
 				return nil, err
 			}
 
-			// Atomic Resolve & Validate (Prevents DNS Rebinding)
 			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
 			if err != nil {
 				return nil, err
@@ -77,7 +77,6 @@ var sharedClient = &http.Client{
 				return nil, fmt.Errorf("security: all resolved IPs are restricted")
 			}
 
-			// Pin the connection to the safe IP
 			dialer := &net.Dialer{
 				Timeout:   5 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -97,7 +96,6 @@ func validateSSRF(u *url.URL) error {
 		return fmt.Errorf("prohibited protocol")
 	}
 
-	// Port Restriction: Only allow standard web ports
 	port := u.Port()
 	if port != "" && port != "80" && port != "443" {
 		return fmt.Errorf("restricted port access")
@@ -110,13 +108,6 @@ func validateSSRF(u *url.URL) error {
 		}
 		return nil
 	}
-
-	ips, _ := net.LookupIP(host)
-	for _, ip := range ips {
-		if isPrivateIP(ip) {
-			return fmt.Errorf("resolves to private IP")
-		}
-	}
 	return nil
 }
 
@@ -127,9 +118,10 @@ func isPrivateIP(ip net.IP) bool {
 	if ip4 := ip.To4(); ip4 != nil {
 		return ip4[0] == 10 ||
 			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
-			(ip4[0] == 192 && ip4[1] == 168)
+			(ip4[0] == 192 && ip4[1] == 168) ||
+			(ip4[0] == 169 && ip4[1] == 254)
 	}
-	return strings.HasPrefix(ip.String(), "fc00:") || strings.HasPrefix(ip.String(), "fd00:")
+	return strings.HasPrefix(ip.String(), "fc00:") || strings.HasPrefix(ip.String(), "fd00:") || strings.HasPrefix(ip.String(), "fe80:")
 }
 
 func Ping(targetURL string) CheckResult {
@@ -165,9 +157,18 @@ func Ping(targetURL string) CheckResult {
 			ErrorMessage: err.Error(),
 		}
 	}
-	defer resp.Body.Close()
 	
-	totalLatency := time.Since(start)
+	// Server performance is best measured by TTFB
+	ttfb := ttfbDone.Sub(start)
+	if ttfbDone.IsZero() {
+		ttfb = time.Since(start)
+	}
+
+	// Drain body to enable reuse, but time it separately
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	
+	fullDuration := time.Since(start)
 
 	server := resp.Header.Get("Server")
 	if server == "" {
@@ -180,19 +181,14 @@ func Ping(targetURL string) CheckResult {
 		errMsg = fmt.Sprintf("status code: %d", resp.StatusCode)
 	}
 
-	// Accuracy Fix: If TTFB was never hit (e.g. cached or instant error), fallback to total
-	actualTTFB := ttfbDone.Sub(start)
-	if ttfbDone.IsZero() {
-		actualTTFB = totalLatency
-	}
-
 	return CheckResult{
 		Up:           isUp,
-		Latency:      totalLatency,
+		Latency:      ttfb,         // Primary "Performance" metric
+		FullDuration: fullDuration, // Metric including data transfer
 		DNS:          dnsDone.Sub(dnsStart),
 		Connect:      connDone.Sub(connStart),
 		TLS:          tlsDone.Sub(tlsStart),
-		TTFB:         actualTTFB,
+		TTFB:         ttfb,
 		IP:           remoteAddr,
 		Server:       server,
 		Size:         resp.ContentLength,
@@ -242,7 +238,6 @@ func CheckSaaSStatus(monitorID int, statusPageURL string) ([]db.SaaSServiceStatu
 		return nil, fmt.Errorf("status page API returned %d", resp.StatusCode)
 	}
 
-	// Security: Limit response size to 1MB to prevent OOM (Response Bomb)
 	limitedReader := io.LimitReader(resp.Body, 1024*1024)
 
 	var summary statusPageSummary
@@ -284,12 +279,10 @@ func resolveStatusPageAPI(rawURL string) string {
 		return rawURL
 	}
 	
-	// Standard Atlassian Statuspage
 	if strings.Contains(u.Host, "statuspage.io") || strings.Contains(u.Path, "summary.json") {
 		return rawURL
 	}
 	
-	// Try appending standard path if not present
 	cleanPath := strings.TrimRight(u.Path, "/")
 	return fmt.Sprintf("%s://%s%s/api/v2/summary.json", u.Scheme, u.Host, cleanPath)
 }

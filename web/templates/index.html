@@ -296,8 +296,8 @@
             width: 180px;
             background-color: var(--text);
             color: var(--bg);
-            padding: 8px;
-            border-radius: 6px;
+            padding: 10px;
+            border-radius: 8px;
             position: absolute;
             z-index: 100;
             bottom: 125%;
@@ -305,8 +305,10 @@
             margin-left: -90px;
             opacity: 0;
             transition: opacity 0.2s;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+            line-height: 1.4;
         }
 
         .trace-tooltip:hover .tooltiptext {
@@ -540,12 +542,9 @@
     </div>
 
     <!-- MAIN DASHBOARD CONTAINER -->
-    <div class="container" id="dashboard-content" 
-        hx-get="/" 
-        hx-trigger="every 5s, registryUpdate from:body" 
-        hx-select="#dashboard-content"
-        hx-swap="outerHTML">
-        
+    <div class="container" id="dashboard-content" hx-get="/" hx-trigger="every 5s, registryUpdate from:body"
+        hx-select="#dashboard-content" hx-swap="outerHTML">
+
         <div class="grid">
             <div class="card">
                 <div class="sub-metric">Availability</div>
@@ -582,8 +581,7 @@
             <h3>No Infrastructure Monitored</h3>
             <p style="color: var(--text-muted); margin-bottom: 2rem;">Start by adding your first endpoint or status page
                 to begin monitoring.</p>
-            <button class="primary" style="margin: 0 auto;"
-                onclick="showAddModal()">Provision First Monitor</button>
+            <button class="primary" style="margin: 0 auto;" onclick="showAddModal()">Provision First Monitor</button>
         </div>
         {{else}}
         <h2>Registry</h2>
@@ -592,7 +590,7 @@
                 <thead>
                     <tr>
                         <th style="width: 35%;">Endpoint</th>
-                        <th>Performance Trend</th>
+                        <th>TTFB (Emerald)</th>
                         <th>History</th>
                         <th>Status</th>
                         <th></th>
@@ -641,26 +639,43 @@
                         <td>
                             <div class="trace-tooltip">
                                 <div style="display: flex; align-items: flex-end; gap: 0.5rem; height: 32px;">
-                                    <div style="font-weight: 700;">{{if .LastChecked.Valid}}{{.AvgLatency}}ms{{else}}--{{end}}</div>
+                                    <div>
+                                        <div style="font-weight: 700;">{{if
+                                            .LastChecked.Valid}}{{.AvgLatency}}ms{{else}}--{{end}}</div>
+                                        {{if .LastResult.Up}}<div
+                                            style="font-size: 0.7rem; color: var(--primary); font-weight: 600;">
+                                            Transfer: {{minus .LastResult.FullDuration.Milliseconds
+                                            .LastResult.TTFB.Milliseconds}}ms</div>{{end}}
+                                    </div>
                                     <svg width="80" height="24" viewBox="0 0 100 30" class="sparkline">
                                         <polyline points="{{sparkPoints .LatencyHistory .MaxLatency 100 30}}" />
                                     </svg>
                                 </div>
                                 <span class="tooltiptext">
                                     {{if .LastResult.Up}}
-                                    DNS: {{.LastResult.DNS.Milliseconds}}ms<br>
-                                    TLS: {{.LastResult.TLS.Milliseconds}}ms<br>
+                                    <div
+                                        style="font-weight: 700; border-bottom: 1px solid var(--border); margin-bottom: 4px;">
+                                        Network Trace</div>
+                                    DNS: {{if gt .LastResult.DNS.Milliseconds
+                                    0}}{{.LastResult.DNS.Milliseconds}}ms{{else}}<span
+                                        style="opacity:0.5">cached</span>{{end}}<br>
+                                    TLS: {{if gt .LastResult.TLS.Milliseconds
+                                    0}}{{.LastResult.TLS.Milliseconds}}ms{{else}}<span
+                                        style="opacity:0.5">cached</span>{{end}}<br>
                                     TTFB: {{.LastResult.TTFB.Milliseconds}}ms
-                                    {{else if not .LastChecked.Valid}}
+                                    {{else}}
+                                    {{if not .LastChecked.Valid}}
                                     Analysis Pending...
                                     {{else}}
                                     Error: {{.LastResult.ErrorMessage}}
+                                    {{end}}
                                     {{end}}
                                 </span>
                             </div>
                         </td>
                         <td>
-                            <div class="sub-metric">{{if .LastChecked.Valid}}{{printf "%.2f" .Uptime24h}}% (24h){{else}}Initializing...{{end}}</div>
+                            <div class="sub-metric">{{if .LastChecked.Valid}}{{printf "%.2f" .Uptime24h}}%
+                                (24h){{else}}Initializing...{{end}}</div>
                             <div class="uptime-bar">
                                 {{range padHistory .History 30}}
                                 <div class="uptime-tick {{if eq . 1}}up{{else if eq . 0}}down{{end}}"></div>
@@ -748,7 +763,8 @@
                     onclick="document.getElementById('addModal').style.display='none'">&times;</span>
             </div>
             <div id="add-monitor-error" class="error-banner"></div>
-            <form id="add-monitor-form" hx-post="/add-monitor" hx-indicator="#add-asset-spinner" hx-swap="none" onsubmit="event.preventDefault();">
+            <form id="add-monitor-form" hx-post="/add-monitor" hx-indicator="#add-asset-spinner" hx-swap="none"
+                onsubmit="event.preventDefault();">
                 <div style="margin-bottom: 1rem;">
                     <label class="sub-metric">Monitor Name</label>
                     <input type="text" name="name" placeholder="e.g. Primary API" required>
@@ -765,7 +781,8 @@
                     <label class="sub-metric">Alert Webhook (Optional)</label>
                     <input type="url" name="webhook_url" placeholder="Slack/Discord Webhook">
                 </div>
-                <button type="submit" class="primary" id="deploy-btn" style="margin-top: 1rem; width: 100%; justify-content: center;">
+                <button type="submit" class="primary" id="deploy-btn"
+                    style="margin-top: 1rem; width: 100%; justify-content: center;">
                     <div id="add-asset-spinner" class="htmx-indicator spinner" style="margin-right: 8px;"></div>
                     <span id="deploy-btn-text">Deploy Monitor</span>
                 </button>
@@ -778,12 +795,18 @@
         <div class="modal-content" style="max-width: 400px; text-align: center;">
             <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
             <h3>Confirm Decommission</h3>
-            <p style="color: var(--text-muted); margin-bottom: 2rem;">Are you sure you want to remove <strong id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data will be purged.</p>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Are you sure you want to remove <strong
+                    id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data will
+                be purged.</p>
             <div style="display: flex; gap: 1rem;">
-                <button class="primary" style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);" onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
-                <form hx-post="/delete-monitor" hx-swap="none" style="flex: 1;" onsubmit="document.getElementById('deleteModal').style.display='none'">
+                <button class="primary"
+                    style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);"
+                    onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
+                <form hx-post="/delete-monitor" hx-swap="none" style="flex: 1;"
+                    onsubmit="document.getElementById('deleteModal').style.display='none'">
                     <input type="hidden" name="id" id="delete-monitor-id">
-                    <button type="submit" class="primary" style="width: 100%; justify-content: center; background: var(--danger);">Delete</button>
+                    <button type="submit" class="primary"
+                        style="width: 100%; justify-content: center; background: var(--danger);">Delete</button>
                 </form>
             </div>
         </div>
@@ -829,26 +852,26 @@
             document.getElementById('addModal').style.display = 'block';
         }
 
-        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        document.body.addEventListener('htmx:beforeRequest', function (evt) {
             if (evt.detail.elt.id === 'add-monitor-form') {
                 const btn = document.getElementById('deploy-btn');
                 const btnText = document.getElementById('deploy-btn-text');
                 const errorBanner = document.getElementById('add-monitor-error');
-                
+
                 btn.disabled = true;
                 btnText.innerText = 'Deploying...';
                 errorBanner.style.display = 'none';
             }
         });
 
-        document.body.addEventListener('htmx:afterRequest', function(evt) {
+        document.body.addEventListener('htmx:afterRequest', function (evt) {
             if (evt.detail.elt.id === 'add-monitor-form') {
                 const btn = document.getElementById('deploy-btn');
                 const btnText = document.getElementById('deploy-btn-text');
-                
+
                 btn.disabled = false;
                 btnText.innerText = 'Deploy Monitor';
-                
+
                 if (evt.detail.xhr.status >= 200 && evt.detail.xhr.status < 300) {
                     document.getElementById('addModal').style.display = 'none';
                     evt.detail.elt.reset();
@@ -856,7 +879,7 @@
             }
         });
 
-        document.body.addEventListener('htmx:responseError', function(evt) {
+        document.body.addEventListener('htmx:responseError', function (evt) {
             if (evt.detail.elt.id === 'add-monitor-form') {
                 const errorBanner = document.getElementById('add-monitor-error');
                 errorBanner.innerText = evt.detail.xhr.responseText || 'An unexpected error occurred.';
@@ -864,7 +887,7 @@
             }
         });
 
-        document.body.addEventListener('click', function(evt) {
+        document.body.addEventListener('click', function (evt) {
             const trigger = evt.target.closest('.delete-trigger');
             if (trigger) {
                 const id = trigger.dataset.id;
