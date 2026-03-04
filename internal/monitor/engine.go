@@ -16,24 +16,25 @@ type LiveState struct {
 	LatencyHistory map[int][]int       // monitorID -> last 20 latencies (ms)
 	SaaSHistory    map[string][]string // monitorID:serviceName -> last 20 statuses
 	LastResults    map[int]CheckResult // monitorID -> last full check result
+	FailureCounts  map[int]int         // monitorID -> consecutive failures
 }
 
 var (
 	monitorContexts sync.Map // map[int]context.CancelFunc
 	sslContexts     sync.Map // map[int]context.CancelFunc (keyed by monitorID)
-	failureCounts   sync.Map // map[int]int (monitorID -> failure count)
 	State           = &LiveState{
 		MonitorHistory: make(map[int][]int),
 		LatencyHistory: make(map[int][]int),
 		SaaSHistory:    make(map[string][]string),
 		LastResults:    make(map[int]CheckResult),
+		FailureCounts:  make(map[int]int),
 	}
 )
 
 func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	history := s.MonitorHistory[id]
 	history = append([]int{status}, history...)
 	if len(history) > 30 {
@@ -171,7 +172,9 @@ func StopMonitor(id int) {
 		cancel.(context.CancelFunc)()
 		sslContexts.Delete(id)
 	}
-	failureCounts.Delete(id)
+	State.mu.Lock()
+	delete(State.FailureCounts, id)
+	State.mu.Unlock()
 }
 
 func RegisterSSLCheck(s db.SSLCheck) {
@@ -183,13 +186,17 @@ func RegisterSSLCheck(s db.SSLCheck) {
 func watchMonitor(ctx context.Context, m db.Monitor) {
 	PerformMonitorCheck(&m)
 	interval := m.IntervalSeconds
-	if interval <= 0 { interval = 60 }
+	if interval <= 0 {
+		interval = 60
+	}
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done(): return
-		case <-ticker.C: PerformMonitorCheck(&m)
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			PerformMonitorCheck(&m)
 		}
 	}
 }
@@ -203,39 +210,56 @@ func PerformMonitorCheck(m *db.Monitor) {
 
 	result := Ping(m.URL)
 	status := 0
-	if result.Up { status = 1 }
+	if result.Up {
+		status = 1
+	}
 
 	shouldAlert := false
 	if status == 0 {
-		countRaw, _ := failureCounts.LoadOrStore(m.ID, 0)
-		count := countRaw.(int) + 1
-		failureCounts.Store(m.ID, count)
+		State.mu.Lock()
+		count := State.FailureCounts[m.ID] + 1
+		State.FailureCounts[m.ID] = count
+		State.mu.Unlock()
 		if count >= 3 && (lastStatus == nil || *lastStatus == 1) {
 			shouldAlert = true
 		}
 	} else {
-		failureCounts.Delete(m.ID)
+		State.mu.Lock()
+		delete(State.FailureCounts, m.ID)
+		State.mu.Unlock()
 		if lastStatus != nil && *lastStatus == 0 {
 			shouldAlert = true
 		}
 	}
 
-	if shouldAlert { triggerAlert(*m, status, result) }
-	
+	if shouldAlert {
+		triggerAlert(*m, status, result)
+	}
+
 	m.LastStatus.Valid = true
 	m.LastStatus.Int64 = int64(status)
 	State.updateMonitorState(m.ID, status, result)
 
-	_ = db.UpdateMonitorStatus(m.ID, status)
-	_ = db.SaveLog(m.ID, status, int(result.Latency.Milliseconds()), result.ErrorMessage)
+	if err := db.UpdateMonitorStatus(m.ID, status); err != nil {
+		slog.Error("Failed to update monitor status", "id", m.ID, "error", err)
+	}
+	if err := db.SaveLog(m.ID, status, int(result.Latency.Milliseconds()), result.ErrorMessage); err != nil {
+		slog.Error("Failed to save check log", "id", m.ID, "error", err)
+	}
 
 	if m.StatusPageURL.Valid && m.StatusPageURL.String != "" {
 		statuses, err := CheckSaaSStatus(m.ID, m.StatusPageURL.String)
-		if err == nil {
+		if err != nil {
+			slog.Warn("Failed to check SaaS status", "id", m.ID, "url", m.StatusPageURL.String, "error", err)
+		} else {
 			for _, s := range statuses {
 				State.updateSaaSState(m.ID, s.ServiceName, s.Status)
-				_ = db.UpdateSaaSStatus(m.ID, s.ServiceName, s.Status, s.Impact, s.LatestFix)
-				_ = db.SaveSaaSStatusLog(m.ID, s.ServiceName, s.Status)
+				if err := db.UpdateSaaSStatus(m.ID, s.ServiceName, s.Status, s.Impact, s.LatestFix); err != nil {
+					slog.Error("Failed to update SaaS status", "id", m.ID, "service", s.ServiceName, "error", err)
+				}
+				if err := db.SaveSaaSStatusLog(m.ID, s.ServiceName, s.Status); err != nil {
+					slog.Error("Failed to save SaaS status log", "id", m.ID, "service", s.ServiceName, "error", err)
+				}
 			}
 		}
 	}
@@ -243,7 +267,9 @@ func PerformMonitorCheck(m *db.Monitor) {
 
 func triggerAlert(m db.Monitor, status int, result CheckResult) {
 	statusStr := "DOWN"
-	if status == 1 { statusStr = "UP" }
+	if status == 1 {
+		statusStr = "UP"
+	}
 	if m.WebhookURL.Valid && m.WebhookURL.String != "" {
 		go func() {
 			alert := notifier.Alert{
@@ -264,8 +290,10 @@ func watchSSL(ctx context.Context, s db.SSLCheck) {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done(): return
-		case <-ticker.C: CheckAndSaveSSL(s)
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			CheckAndSaveSSL(s)
 		}
 	}
 }

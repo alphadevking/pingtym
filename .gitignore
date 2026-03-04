@@ -14,7 +14,10 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# SQLite temporary files
+# Environment and Secrets
+.env
+.env.local
+.env.production
 *.db
 *.db-shm
 *.db-wal
@@ -28,3 +31,6 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+# Temporary files
+/tmp

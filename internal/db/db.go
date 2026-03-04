@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
 )
 
@@ -21,6 +23,7 @@ type Monitor struct {
 	LastChecked     sql.NullTime
 	StatusPageURL   sql.NullString
 	WebhookURL      sql.NullString
+	CreatedAt       time.Time
 }
 
 type SaaSServiceStatus struct {
@@ -44,14 +47,38 @@ type SSLCheck struct {
 
 func InitDB(dataSourceName string) error {
 	var err error
-	dsn := fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)", dataSourceName)
+	var driverName string
+	var dsn string
 
-	DB, err = sql.Open("sqlite", dsn)
+	tursoURL := os.Getenv("TURSO_DATABASE_URL")
+	tursoToken := os.Getenv("TURSO_AUTH_TOKEN")
+
+	if tursoURL != "" {
+		driverName = "libsql"
+		if tursoToken != "" {
+			dsn = fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
+		} else {
+			dsn = tursoURL
+		}
+		slog.Info("Using Turso (libSQL) database")
+	} else {
+		driverName = "sqlite"
+		dsn = fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)", dataSourceName)
+		slog.Info("Using local SQLite database", "path", dataSourceName)
+	}
+
+	DB, err = sql.Open(driverName, dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	DB.SetMaxOpenConns(1)
+	if driverName == "sqlite" {
+		DB.SetMaxOpenConns(1)
+	} else {
+		DB.SetMaxOpenConns(10)
+		DB.SetMaxIdleConns(5)
+		DB.SetConnMaxLifetime(time.Hour)
+	}
 
 	if err = DB.Ping(); err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -65,7 +92,7 @@ func InitDB(dataSourceName string) error {
 		slog.Warn("Schema migration encountered errors", "error", err)
 	}
 
-	slog.Info("Database initialized successfully", "mode", "Persistent Multi-Tenant")
+	slog.Info("Database initialized successfully", "driver", driverName)
 	return nil
 }
 
@@ -80,7 +107,8 @@ func createTables() error {
 			last_status INTEGER,
 			last_checked DATETIME,
 			status_page_url TEXT,
-			webhook_url TEXT
+			webhook_url TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE IF NOT EXISTS ssl_checks (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +161,19 @@ func createTables() error {
 }
 
 func migrateSchema() error {
-	// 1. Monitors Columns
+	// 1. Ensure monitors has created_at
+	if !columnExists("monitors", "created_at") {
+		// SQLite limitation: Cannot add column with non-constant default (like CURRENT_TIMESTAMP)
+		_, err := DB.Exec("ALTER TABLE monitors ADD COLUMN created_at DATETIME")
+		if err != nil {
+			slog.Error("Failed to add created_at column", "error", err)
+		} else {
+			// Update existing records to have a valid timestamp
+			_, _ = DB.Exec("UPDATE monitors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+		}
+	}
+
+	// 2. Monitors Columns (Other dynamic columns)
 	columns := map[string]string{
 		"session_id":      "TEXT NOT NULL DEFAULT 'legacy'",
 		"status_page_url": "TEXT",
@@ -173,8 +213,9 @@ func PruneLogs(days int) error {
 }
 
 func CreateMonitor(sessionID, name, url, statusPageURL, webhookURL string) (Monitor, error) {
-	res, err := DB.Exec("INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url) VALUES (?, ?, ?, ?, ?)", 
-		sessionID, name, url, statusPageURL, webhookURL)
+	now := time.Now().UTC()
+	res, err := DB.Exec("INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?)", 
+		sessionID, name, url, statusPageURL, webhookURL, now)
 	if err != nil {
 		return Monitor{}, err
 	}
@@ -188,11 +229,12 @@ func CreateMonitor(sessionID, name, url, statusPageURL, webhookURL string) (Moni
 		IntervalSeconds: 60,
 		StatusPageURL:   sql.NullString{String: statusPageURL, Valid: statusPageURL != ""},
 		WebhookURL:      sql.NullString{String: webhookURL, Valid: webhookURL != ""},
+		CreatedAt:       now,
 	}, nil
 }
 
 func GetMonitors(sessionID string) ([]Monitor, error) {
-	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url FROM monitors WHERE session_id = ?", sessionID)
+	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors WHERE session_id = ?", sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +243,7 @@ func GetMonitors(sessionID string) ([]Monitor, error) {
 	var monitors []Monitor
 	for rows.Next() {
 		var m Monitor
-		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL)
+		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +253,7 @@ func GetMonitors(sessionID string) ([]Monitor, error) {
 }
 
 func GetAllActiveMonitors() ([]Monitor, error) {
-	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url FROM monitors")
+	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors")
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +262,7 @@ func GetAllActiveMonitors() ([]Monitor, error) {
 	var monitors []Monitor
 	for rows.Next() {
 		var m Monitor
-		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL)
+		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt)
 		if err != nil {
 			return nil, err
 		}

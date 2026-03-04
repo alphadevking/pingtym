@@ -6,12 +6,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"pingtym/internal/db"
 	"pingtym/internal/monitor"
 	"pingtym/web"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
+
+var registerOnce sync.Once
 
 var startTime = time.Now()
 
@@ -19,35 +24,8 @@ var templates *template.Template
 
 func loadTemplates() error {
 	var err error
-	templates, err = template.New("index.html").Funcs(template.FuncMap{
-		"until": func(n int) []int {
-			res := make([]int, n)
-			for i := range res {
-				res[i] = i
-			}
-			return res
-		},
-		"multiply": func(a, b int) int { return a * b },
-		"divide":   func(a, b int) int { if b == 0 { return a }; return a / b },
-		"minus":    func(a, b int) int { return a - b },
-		"floatDiv": func(a, b int) float64 {
-			if b == 0 {
-				return 0
-			}
-			return float64(a) / float64(b)
-		},
-		"sparkPoint": func(val, max, height int) float64 {
-			if max == 0 {
-				return float64(height)
-			}
-			// Calculate Y coordinate: height - (val / max * height)
-			// We use 80% of height (24px out of 30px) for the peak to keep it in view
-			ratio := float64(val) / float64(max)
-			if ratio > 1.0 { ratio = 1.0 }
-			return float64(height) - (ratio * float64(height) * 0.8)
-		},
-	}).ParseFS(web.TemplateFS, "templates/index.html", "templates/learn.html")
-	
+	templates, err = template.New("index.html").Funcs(GetTemplateFuncs()).ParseFS(web.TemplateFS, "templates/index.html", "templates/learn.html")
+
 	if err != nil {
 		return fmt.Errorf("failed to parse template from embed: %w", err)
 	}
@@ -57,22 +35,33 @@ func loadTemplates() error {
 }
 
 func RegisterHandlers() {
-	if err := loadTemplates(); err != nil {
-		slog.Error("Initial template load failed", "error", err)
-	}
+	registerOnce.Do(func() {
+		if err := loadTemplates(); err != nil {
+			slog.Error("Initial template load failed", "error", err)
+		}
 
-	http.HandleFunc("/", handleIndex)
-	http.HandleFunc("/learn", handleLearn)
-	http.HandleFunc("/favicon.ico", handleFavicon)
-	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(web.TemplateFS))))
-	http.HandleFunc("/add-monitor", handleAddMonitor)
-	http.HandleFunc("/delete-monitor", handleDeleteMonitor)
-	http.HandleFunc("/api/cron", handleCron)
+		// Define routes
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", handleIndex)
+		mux.HandleFunc("/learn", handleLearn)
+		mux.HandleFunc("/favicon.ico", handleFavicon)
+		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(web.TemplateFS))))
+		mux.HandleFunc("/add-monitor", handleAddMonitor)
+		mux.HandleFunc("/delete-monitor", handleDeleteMonitor)
+		mux.HandleFunc("/api/cron", handleCron)
+
+		// Wrap with Middleware Chain (Security, Logging, & Rate Limiting)
+		wrappedMux := Chain(mux, LoggingMiddleware, SecurityMiddleware, RateLimitMiddleware)
+
+		// Set the global handler
+		http.Handle("/", wrappedMux)
+	})
 }
 
 func handleLearn(w http.ResponseWriter, r *http.Request) {
 	if err := templates.ExecuteTemplate(w, "learn.html", nil); err != nil {
 		slog.Error("Failed to execute learn template", "error", err)
+		http.Error(w, "An internal error occurred", http.StatusInternalServerError)
 	}
 }
 
@@ -98,7 +87,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	// Retry loading templates if they are nil (fallback for hot fixes)
 	if templates == nil {
 		if err := loadTemplates(); err != nil {
@@ -126,12 +115,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		for i := range statuses {
 			statuses[i].History = monitor.State.GetSaaSHistory(m.ID, statuses[i].ServiceName)
 		}
-		
+
 		u24h, _ := db.GetUptimePercentage(m.ID, 24*time.Hour)
 		u7d, _ := db.GetUptimePercentage(m.ID, 7*24*time.Hour)
 		avgLat, _ := db.GetAverageLatency(m.ID, 24*time.Hour)
 		latencyHistory := monitor.State.GetLatencyHistory(m.ID)
-		
+
 		maxLat := 0
 		for _, v := range latencyHistory {
 			if v > maxLat {
@@ -191,14 +180,30 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		sslViews = append(sslViews, SSLView{SSLCheck: s, DaysLeft: days})
 	}
 
+	// Derive "Member Since" from the oldest monitor or fallback to current month
+	memberSince := time.Now().Format("Jan 2006")
+	if len(monitors) > 0 {
+		oldest := monitors[0].CreatedAt
+		for _, m := range monitors {
+			if m.CreatedAt.Before(oldest) {
+				oldest = m.CreatedAt
+			}
+		}
+		memberSince = oldest.Format("Jan 2006")
+	}
+
 	userInfo := struct {
 		SessionID string
 		Identity  string
 		Since     string
+		Tier      string
+		IP        string
 	}{
 		SessionID: sessionID,
 		Identity:  fmt.Sprintf("User-%s", sessionID[:8]),
-		Since:     time.Now().Format("Jan 2006"), // Simplified since we don't track join date yet
+		Since:     memberSince,
+		Tier:      "Standard", // Standard Tier by default
+		IP:        getRealIP(r),
 	}
 
 	data := struct {
@@ -233,15 +238,53 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CSRF Protection: Basic Origin Check
+	if !ValidateOrigin(r) {
+		http.Error(w, "Security Violation: Untrusted origin", http.StatusForbidden)
+		return
+	}
+
 	sessionID := getSessionID(w, r)
+
+	// Resource Protection: Limit to 10 monitors per session
+	existing, _ := db.GetMonitors(sessionID)
+	if len(existing) >= 10 {
+		http.Error(w, "Infrastructure Quota Exceeded: Max 10 monitors allowed per session.", http.StatusForbidden)
+		return
+	}
+
 	name := r.FormValue("name")
-	rawURL := r.FormValue("url")
+	rawURL := strings.TrimSpace(r.FormValue("url"))
 	statusPageURL := r.FormValue("status_page_url")
 	webhookURL := r.FormValue("webhook_url")
+
+	// Input Validation
+	if len(name) > 100 {
+		http.Error(w, "Name too long (max 100 chars)", http.StatusBadRequest)
+		return
+	}
 
 	if name == "" || rawURL == "" {
 		http.Error(w, "Name and URL are required", http.StatusBadRequest)
 		return
+	}
+
+	// SSRF Protection: Ensure URLs are public and safe
+	if err := IsSafeURL(rawURL); err != nil {
+		http.Error(w, fmt.Sprintf("Security Restriction (URL): %v", err), http.StatusForbidden)
+		return
+	}
+	if statusPageURL != "" {
+		if err := IsSafeURL(statusPageURL); err != nil {
+			http.Error(w, fmt.Sprintf("Security Restriction (Status Page): %v", err), http.StatusForbidden)
+			return
+		}
+	}
+	if webhookURL != "" {
+		if err := IsSafeURL(webhookURL); err != nil {
+			http.Error(w, fmt.Sprintf("Security Restriction (Webhook): %v", err), http.StatusForbidden)
+			return
+		}
 	}
 
 	m, err := db.CreateMonitor(sessionID, name, rawURL, statusPageURL, webhookURL)
@@ -259,7 +302,7 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 		if domain != "" {
 			s, err := db.CreateSSLCheck(m.ID, domain)
 			if err == nil {
-				monitor.CheckAndSaveSSL(s) // Sync check for Gold Standard UX
+				monitor.CheckAndSaveSSL(s)  // Sync check for Gold Standard UX
 				monitor.RegisterSSLCheck(s) // Background loop
 			}
 		}
@@ -289,6 +332,12 @@ func handleDeleteMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CSRF Protection: Basic Origin Check
+	if !ValidateOrigin(r) {
+		http.Error(w, "Security Violation: Untrusted origin", http.StatusForbidden)
+		return
+	}
+
 	sessionID := getSessionID(w, r)
 	idStr := r.FormValue("id")
 	id, err := strconv.Atoi(idStr)
@@ -314,6 +363,27 @@ func handleDeleteMonitor(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCron(w http.ResponseWriter, r *http.Request) {
+	// Security: Require CRON_SECRET for this endpoint
+	secret := os.Getenv("CRON_SECRET")
+	authHeader := r.Header.Get("Authorization")
+
+	if secret != "" {
+		if authHeader != "Bearer "+secret {
+			slog.Warn("Unauthorized cron attempt", "remote", r.RemoteAddr)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		// In production, we should always have a secret.
+		// If missing, we log a warning but allow (for local dev ease).
+		isProd := os.Getenv("VERCEL") == "1" || os.Getenv("ENV") == "production"
+		if isProd {
+			slog.Error("SECURITY CRITICAL: CRON_SECRET is not set in production!")
+			http.Error(w, "Endpoint disabled: Missing configuration", http.StatusForbidden)
+			return
+		}
+	}
+
 	monitor.RunGlobalCheck()
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Global check complete"))

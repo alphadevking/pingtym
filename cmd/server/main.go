@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"pingtym/internal/api"
 	"pingtym/internal/db"
 	"pingtym/internal/monitor"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,12 +20,41 @@ import (
 
 var initOnce sync.Once
 
+// loadEnv reads a .env file and sets environment variables
+func loadEnv() {
+	file, err := os.Open(".env")
+	if err != nil {
+		return // No .env file, ignore
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			// Handle quoted values
+			if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+				val = val[1 : len(val)-1]
+			}
+			os.Setenv(key, val)
+		}
+	}
+}
+
 // Handler is the entry point for Vercel Serverless Functions
 func Handler(w http.ResponseWriter, r *http.Request) {
 	initOnce.Do(func() {
+		loadEnv()
+		api.InitSession()
 		setup()
+		api.RegisterHandlers()
 	})
-	api.RegisterHandlers()
 	http.DefaultServeMux.ServeHTTP(w, r)
 }
 
@@ -49,8 +80,10 @@ func setup() {
 }
 
 func main() {
+	loadEnv()
+	api.InitSession()
 	setup()
-	
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -63,9 +96,12 @@ func main() {
 
 	addr := fmt.Sprintf("%s:%s", host, port)
 	api.RegisterHandlers()
-	
+
 	server := &http.Server{
-		Addr: addr,
+		Addr:         addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {

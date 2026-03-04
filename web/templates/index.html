@@ -7,8 +7,8 @@
     <title>Pingtym Enterprise - Service Insights</title>
     <link rel="icon"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
-    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous" defer></script>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" crossorigin="anonymous">
     <style>
         :root {
             --primary: #10b981;
@@ -126,7 +126,9 @@
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
-        h1, h2, h3 {
+        h1,
+        h2,
+        h3 {
             margin: 0 0 1.25rem 0;
             font-weight: 700;
             letter-spacing: -0.025em;
@@ -146,7 +148,8 @@
             min-width: 800px;
         }
 
-        th, td {
+        th,
+        td {
             text-align: left;
             padding: 1rem 1.5rem;
             border-bottom: 1px solid var(--border);
@@ -171,11 +174,27 @@
             font-weight: 600;
         }
 
-        .status-up { background: var(--success-light); color: var(--success); }
-        .status-down { background: var(--danger-light); color: var(--danger); }
+        .status-up {
+            background: var(--success-light);
+            color: var(--success);
+        }
 
-        .metric { font-size: 1.5rem; font-weight: 800; color: var(--text); }
-        .sub-metric { font-size: 0.8125rem; color: var(--text-muted); font-weight: 500; }
+        .status-down {
+            background: var(--danger-light);
+            color: var(--danger);
+        }
+
+        .metric {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .sub-metric {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
 
         input {
             width: 100%;
@@ -233,28 +252,109 @@
             border: 1px solid var(--border);
         }
 
-        .uptime-bar { display: flex; gap: 2px; margin-top: 0.5rem; }
-        .uptime-tick { height: 16px; width: 4px; border-radius: 2px; background: var(--success); opacity: 0.2; }
-        .uptime-tick.up { background: var(--success); opacity: 1; }
-        .uptime-tick.down { background: var(--danger); opacity: 1; }
+        .uptime-bar {
+            display: flex;
+            gap: 2px;
+            margin-top: 0.5rem;
+        }
 
-        .trace-tooltip { position: relative; cursor: help; }
+        .uptime-tick {
+            height: 16px;
+            width: 4px;
+            border-radius: 2px;
+            background: var(--success);
+            opacity: 0.2;
+        }
+
+        .uptime-tick.up {
+            background: var(--success);
+            opacity: 1;
+        }
+
+        .uptime-tick.down {
+            background: var(--danger);
+            opacity: 1;
+        }
+
+        .trace-tooltip {
+            position: relative;
+            cursor: help;
+        }
+
         .trace-tooltip .tooltiptext {
-            visibility: hidden; width: 180px; background-color: var(--text); color: var(--bg);
-            padding: 8px; border-radius: 6px; position: absolute; z-index: 100;
-            bottom: 125%; left: 50%; margin-left: -90px; opacity: 0; transition: opacity 0.2s; font-size: 0.7rem;
+            visibility: hidden;
+            width: 180px;
+            background-color: var(--text);
+            color: var(--bg);
+            padding: 8px;
+            border-radius: 6px;
+            position: absolute;
+            z-index: 100;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -90px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 0.7rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
-        .trace-tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
 
-        .color-success { color: var(--success); }
-        .color-danger { color: var(--danger); }
+        .trace-tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
 
-        .saas-box { margin-top: 0.75rem; padding: 0.75rem; background: var(--warning-light); border-radius: 0.5rem; border: 1px solid rgba(217, 119, 6, 0.1); }
-        .saas-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--warning); display: flex; align-items: center; gap: 0.25rem; cursor: pointer; }
-        .saas-item { font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 6, 0.1); }
-        .badge-pill { padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.65rem; font-weight: 700; background: var(--bg); border: 1px solid var(--border); color: var(--text-muted); }
-        .badge-pill.up { border-color: var(--success); color: var(--success); }
+        .color-success {
+            color: var(--success);
+        }
+
+        .color-danger {
+            color: var(--danger);
+        }
+
+        .saas-box {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            background: var(--warning-light);
+            border-radius: 0.5rem;
+            border: 1px solid rgba(217, 119, 6, 0.1);
+        }
+
+        .saas-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--warning);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            cursor: pointer;
+        }
+
+        .saas-item {
+            font-size: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(217, 119, 6, 0.1);
+        }
+
+        .badge-pill {
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+        }
+
+        .badge-pill.up {
+            border-color: var(--success);
+            color: var(--success);
+        }
 
         /* Onboarding Overlay */
         #onboarding-overlay {
@@ -283,9 +383,20 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-            70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 20px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
         }
 
         .onboarding-text {
@@ -297,17 +408,52 @@
         }
 
         /* HTMX Spinner */
-        .htmx-indicator { display: none; }
-        .htmx-request .htmx-indicator { display: inline-block; }
-        .spinner { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #fff; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .htmx-indicator {
+            display: none;
+        }
 
-        #progress-bar { position: fixed; top: 0; left: 0; width: 0%; height: 3px; background: var(--primary); z-index: 2000; transition: width 0.3s ease; }
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 0%;
+            height: 3px;
+            background: var(--primary);
+            z-index: 2000;
+            transition: width 0.3s ease;
+        }
 
         @media (max-width: 640px) {
-            .nav { padding: 0.75rem 1rem; }
-            .grid { grid-template-columns: 1fr; }
-            .metric { font-size: 1.25rem; }
+            .nav {
+                padding: 0.75rem 1rem;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metric {
+                font-size: 1.25rem;
+            }
         }
     </style>
     <script>
@@ -327,8 +473,10 @@
             </svg>
         </div>
         <div class="onboarding-text" id="onboarding-msg">Initializing Secure Session...</div>
-        <div style="margin-top: 1rem; width: 200px; height: 2px; background: #1f1f1f; border-radius: 1px; overflow: hidden;">
-            <div id="onboarding-progress" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s ease;"></div>
+        <div
+            style="margin-top: 1rem; width: 200px; height: 2px; background: #1f1f1f; border-radius: 1px; overflow: hidden;">
+            <div id="onboarding-progress"
+                style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s ease;"></div>
         </div>
     </div>
 
@@ -343,11 +491,13 @@
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                     </svg>
                 </div>
-                <div style="font-size: 1.1rem; font-weight: 800;">Pingtym <span style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>
+                <div style="font-size: 1.1rem; font-weight: 800;">Pingtym <span
+                        style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>
             </div>
             <input type="text" class="search-input" placeholder="Search infrastructure..."
                 onkeyup="filterRegistry(this.value)">
-            <a href="/learn" style="color: var(--text-muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;">Learn</a>
+            <a href="/learn"
+                style="color: var(--text-muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;">Learn</a>
         </div>
         <div style="display: flex; gap: 1rem;">
             <button class="primary"
@@ -362,7 +512,7 @@
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                Add Asset
+                Add Monitor
             </button>
         </div>
     </div>
@@ -377,7 +527,8 @@
             </div>
             <div class="card">
                 <div class="sub-metric">Health</div>
-                <div class="metric {{if eq .HealthStatus "Optimal"}}color-success{{else}}color-danger{{end}}">{{.HealthStatus}}</div>
+                <div class="metric {{if eq .HealthStatus `Optimal`}}color-success{{else}}color-danger{{end}}">
+                    {{.HealthStatus}}</div>
                 <div class="sub-metric" style="margin-top: 0.25rem;">{{.HealthMsg}}</div>
             </div>
             <div class="card">
@@ -391,7 +542,8 @@
                 <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                     <div class="sub-metric" style="word-break: break-all;">ID: <span
                             style="color: var(--text);">{{.User.SessionID}}</span></div>
-                    <div class="sub-metric">Access: <span style="color: var(--text);">Enterprise Tier</span></div>
+                    <div class="sub-metric">IP: <span style="color: var(--text);">{{.User.IP}}</span></div>
+                    <div class="sub-metric">Access: <span style="color: var(--text);">{{.User.Tier}} Tier</span></div>
                     <div class="sub-metric">Member Since: <span style="color: var(--text);">{{.User.Since}}</span></div>
                 </div>
             </div>
@@ -404,7 +556,7 @@
             <p style="color: var(--text-muted); margin-bottom: 2rem;">Start by adding your first endpoint or status page
                 to begin monitoring.</p>
             <button class="primary" style="margin: 0 auto;"
-                onclick="document.getElementById('addModal').style.display='block'">Provision First Asset</button>
+                onclick="document.getElementById('addModal').style.display='block'">Provision First Monitor</button>
         </div>
         {{else}}
         <h2>Registry</h2>
@@ -427,8 +579,10 @@
                             <div class="sub-metric">{{.URL}}</div>
                             {{if .LastResult.Up}}
                             <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                                {{if .LastResult.IP}}
                                 <span class="badge-pill"
                                     style="font-size: 0.6rem; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);">{{.LastResult.IP}}</span>
+                                {{end}}
                                 <span class="badge-pill"
                                     style="font-size: 0.6rem; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);">{{.LastResult.Server}}</span>
                                 {{if gt .LastResult.Size 0}}
@@ -451,7 +605,7 @@
                                 {{range .SaaSStatuses}}
                                 <div class="saas-item">
                                     <span>{{.ServiceName}}</span>
-                                    <span class="badge-pill {{if eq .Status "operational"}}up{{end}}">{{.Status}}</span>
+                                    <span class="badge-pill {{if eq .Status `operational`}}up{{end}}">{{.Status}}</span>
                                 </div>
                                 {{end}}
                             </details>
@@ -462,10 +616,7 @@
                                 <div style="display: flex; align-items: flex-end; gap: 0.5rem; height: 32px;">
                                     <div style="font-weight: 700;">{{.AvgLatency}}ms</div>
                                     <svg width="80" height="24" viewBox="0 0 100 30" class="sparkline">
-                                        {{$pts := .LatencyHistory}}
-                                        {{$max := .MaxLatency}}
-                                        <polyline
-                                            points="{{range $i, $v := $pts}}{{if gt $v 0}}{{multiply $i 5}},{{sparkPoint $v $max 30}} {{end}}{{end}}" />
+                                        <polyline points="{{sparkPoints .LatencyHistory .MaxLatency 100 30}}" />
                                     </svg>
                                 </div>
                                 <span class="tooltiptext">
@@ -530,7 +681,10 @@
                         <tr>
                             <td style="font-weight: 700;">{{.Domain}}</td>
                             <td>
-                                <div style="font-weight: 600;">{{if .ExpiryDate.Valid}}{{.ExpiryDate.Time.Format "Jan 02, 2006"}}{{else}}Analyzing Handshake...{{end}}</div>
+                                <div style="font-weight: 600;">
+                                    {{if .ExpiryDate.Valid}}{{.ExpiryDate.Time.Format "Jan 02, 2006"}}{{else}}Analyzing
+                                    Handshake...{{end}}
+                                </div>
                             </td>
                             <td>
                                 {{if .ExpiryDate.Valid}}
@@ -544,7 +698,8 @@
                                 <span class="sub-metric">Checking...</span>
                                 {{end}}
                             </td>
-                            <td class="sub-metric">{{if .LastChecked.Valid}}{{.LastChecked.Time.Format "15:04:05"}}{{else}}Never{{end}}</td>
+                            <td class="sub-metric">{{if .LastChecked.Valid}}{{.LastChecked.Time.Format
+                                "15:04:05"}}{{else}}Never{{end}}</td>
                         </tr>
                         {{end}}
                     </tbody>
@@ -554,18 +709,18 @@
         {{end}}
     </div>
 
-    <!-- Add Asset Modal -->
+    <!-- Add Monitor Modal -->
     <div id="addModal" class="modal">
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h3 style="margin: 0;">Provision New Asset</h3>
+                <h3 style="margin: 0;">Provision New Monitor</h3>
                 <span style="cursor: pointer; font-size: 1.5rem;"
                     onclick="document.getElementById('addModal').style.display='none'">&times;</span>
             </div>
-            <form hx-post="/add-monitor" hx-indicator="#add-asset-spinner"
+            <form action="/add-monitor" method="POST" hx-post="/add-monitor" hx-indicator="#add-asset-spinner"
                 hx-on::after-request="if(event.detail.successful) { document.getElementById('addModal').style.display='none'; this.reset(); }">
                 <div style="margin-bottom: 1rem;">
-                    <label class="sub-metric">Asset Name</label>
+                    <label class="sub-metric">Monitor Name</label>
                     <input type="text" name="name" placeholder="e.g. Primary API" required>
                 </div>
                 <div style="margin-bottom: 1rem;">
@@ -590,11 +745,11 @@
 
     <script>
         // Onboarding Logic
-        (function() {
+        (function () {
             const overlay = document.getElementById('onboarding-overlay');
             const msg = document.getElementById('onboarding-msg');
             const progress = document.getElementById('onboarding-progress');
-            
+
             if (localStorage.getItem('pingtym-onboarded')) {
                 overlay.style.display = 'none';
                 return;

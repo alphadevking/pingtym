@@ -1,9 +1,11 @@
 package monitor
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -43,18 +45,91 @@ type statusPageSummary struct {
 
 var sharedClient = &http.Client{
 	Timeout: 10 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		return validateSSRF(req.URL)
+	},
 	Transport: &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   5 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+
+			// Atomic Resolve & Validate (Prevents DNS Rebinding)
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+
+			var safeIP net.IP
+			for _, ip := range ips {
+				if !isPrivateIP(ip) {
+					safeIP = ip
+					break
+				}
+			}
+
+			if safeIP == nil {
+				return nil, fmt.Errorf("security: all resolved IPs are restricted")
+			}
+
+			// Pin the connection to the safe IP
+			dialer := &net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(safeIP.String(), port))
+		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   5 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
+}
+
+func validateSSRF(u *url.URL) error {
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("prohibited protocol")
+	}
+
+	// Port Restriction: Only allow standard web ports
+	port := u.Port()
+	if port != "" && port != "80" && port != "443" {
+		return fmt.Errorf("restricted port access")
+	}
+
+	host := u.Hostname()
+	if ip := net.ParseIP(host); ip != nil {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("private IP access restricted")
+		}
+		return nil
+	}
+
+	ips, _ := net.LookupIP(host)
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("resolves to private IP")
+		}
+	}
+	return nil
+}
+
+func isPrivateIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4[0] == 10 ||
+			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
+			(ip4[0] == 192 && ip4[1] == 168)
+	}
+	return strings.HasPrefix(ip.String(), "fc00:") || strings.HasPrefix(ip.String(), "fd00:")
 }
 
 func Ping(targetURL string) CheckResult {
@@ -65,10 +140,10 @@ func Ping(targetURL string) CheckResult {
 		DNSStart: func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
 		DNSDone:  func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
 		ConnectStart: func(_, _ string) { connStart = time.Now() },
-		ConnectDone: func(network, addr string, err error) { 
-			connDone = time.Now()
-			if err == nil {
-				remoteAddr = addr
+		ConnectDone:  func(_, _ string, _ error) { connDone = time.Now() },
+		GotConn: func(info httptrace.GotConnInfo) {
+			if info.Conn != nil {
+				remoteAddr = info.Conn.RemoteAddr().String()
 			}
 		},
 		TLSHandshakeStart: func() { tlsStart = time.Now() },
@@ -167,8 +242,11 @@ func CheckSaaSStatus(monitorID int, statusPageURL string) ([]db.SaaSServiceStatu
 		return nil, fmt.Errorf("status page API returned %d", resp.StatusCode)
 	}
 
+	// Security: Limit response size to 1MB to prevent OOM (Response Bomb)
+	limitedReader := io.LimitReader(resp.Body, 1024*1024)
+
 	var summary statusPageSummary
-	if err := json.NewDecoder(resp.Body).Decode(&summary); err != nil {
+	if err := json.NewDecoder(limitedReader).Decode(&summary); err != nil {
 		return nil, err
 	}
 
