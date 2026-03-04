@@ -153,9 +153,11 @@ func createTables() error {
 			return err
 		}
 	}
-	// Indices
+	// Indices for high-performance multi-tenant lookups
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_monitors_session ON monitors(session_id)")
 	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ssl_monitor ON ssl_checks(monitor_id)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_check_logs_composite ON check_logs(monitor_id, created_at)")
+	DB.Exec("CREATE INDEX IF NOT EXISTS idx_saas_status_monitor ON saas_service_status(monitor_id)")
 	
 	return nil
 }

@@ -644,19 +644,16 @@
                             </span>
                         </td>
                         <td>
-                            <form hx-post="/delete-monitor" hx-target="#dashboard-content" hx-swap="outerHTML">
-                                <input type="hidden" name="id" value="{{.ID}}">
-                                <button type="submit"
-                                    style="background: none; border: none; cursor: pointer; color: var(--text-muted);">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path
-                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                        </path>
-                                    </svg>
-                                </button>
-                            </form>
+                            <button type="button" onclick="confirmDelete({{.ID}}, '{{.Name}}')"
+                                style="background: none; border: none; cursor: pointer; color: var(--text-muted);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                </svg>
+                            </button>
                         </td>
                     </tr>
                     {{end}}
@@ -743,6 +740,22 @@
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+            <h3>Confirm Decommission</h3>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">Are you sure you want to remove <strong id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data will be purged.</p>
+            <div style="display: flex; gap: 1rem;">
+                <button class="primary" style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);" onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
+                <form hx-post="/delete-monitor" hx-target="#dashboard-content" hx-swap="outerHTML" style="flex: 1;" onsubmit="document.getElementById('deleteModal').style.display='none'">
+                    <input type="hidden" name="id" id="delete-monitor-id">
+                    <button type="submit" class="primary" style="width: 100%; justify-content: center; background: var(--danger);">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Onboarding Logic
         (function () {
@@ -802,9 +815,17 @@
             document.documentElement.setAttribute('data-theme', savedTheme);
         }
 
+        function confirmDelete(id, name) {
+            document.getElementById('delete-monitor-id').value = id;
+            document.getElementById('delete-monitor-name').innerText = name;
+            document.getElementById('deleteModal').style.display = 'block';
+        }
+
         window.onclick = function (event) {
-            let modal = document.getElementById('addModal');
-            if (event.target == modal) modal.style.display = "none";
+            let addModal = document.getElementById('addModal');
+            let deleteModal = document.getElementById('deleteModal');
+            if (event.target == addModal) addModal.style.display = "none";
+            if (event.target == deleteModal) deleteModal.style.display = "none";
         }
     </script>
 </body>
