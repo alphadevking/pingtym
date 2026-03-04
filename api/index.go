@@ -2,7 +2,7 @@ package handler
 
 import (
 	"net/http"
-	"pingtym/internal/app"
+	"pingtym/pkg/app"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {

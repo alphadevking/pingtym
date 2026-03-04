@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"pingtym/internal/api"
-	"pingtym/internal/app"
+	"pingtym/pkg/app"
 	"syscall"
 	"time"
 )

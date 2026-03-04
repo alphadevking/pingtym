@@ -2,7 +2,6 @@ package app
 
 import (
 	"bufio"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
