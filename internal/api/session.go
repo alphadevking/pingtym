@@ -16,7 +16,7 @@ import (
 
 const sessionCookieName = "pingtym_session"
 
-// In production, this must be a 32-byte string from an environment variable
+// In production, this must be a strong 32-byte string from an environment variable
 var sessionSecret []byte
 
 func InitSession() {
@@ -26,16 +26,14 @@ func InitSession() {
 		return
 	}
 
-	// For production, we MUST fail if the secret is missing.
-	// However, to keep dev usable, we log a critical error but continue with a temporary one.
 	isProd := os.Getenv("VERCEL") == "1" || os.Getenv("ENV") == "production"
 	if isProd {
-		slog.Error("CRITICAL: SESSION_SECRET is not set in production! This will cause authentication failures.")
-		// We use a dummy fallback only to prevent immediate crash, but this is a configuration error.
-		sessionSecret = []byte("REPLACE-ME-IMMEDIATELY-IN-PROD-SETTINGS")
+		slog.Error("FATAL: SESSION_SECRET is not set in production! Deployment aborted for security.")
+		// In production, we must stop the process. Placeholder keys are a security risk.
+		os.Exit(1)
 	} else {
-		slog.Warn("SESSION_SECRET not found in .env. Using development fallback.")
-		sessionSecret = []byte("pingtym-dev-fallback-secret-2026")
+		slog.Warn("SESSION_SECRET not found in .env. Using ephemeral development fallback.")
+		sessionSecret = []byte("pingtym-dev-ephemeral-secret-key-2026")
 	}
 }
 

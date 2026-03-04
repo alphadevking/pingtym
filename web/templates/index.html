@@ -184,6 +184,11 @@
             color: var(--danger);
         }
 
+        .status-probing {
+            background: var(--warning-light);
+            color: var(--warning);
+        }
+
         .metric {
             font-size: 1.5rem;
             font-weight: 800;
@@ -218,6 +223,11 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
+
+        button.primary:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
 
         .empty-state {
@@ -262,8 +272,8 @@
             height: 16px;
             width: 4px;
             border-radius: 2px;
-            background: var(--success);
-            opacity: 0.2;
+            background: var(--border);
+            opacity: 0.3;
         }
 
         .uptime-tick.up {
@@ -452,6 +462,7 @@
             font-weight: 600;
             margin-bottom: 1.5rem;
             border: 1px solid rgba(220, 38, 38, 0.1);
+            position: relative;
         }
 
         @media (max-width: 640px) {
@@ -469,7 +480,6 @@
         }
     </style>
     <script>
-        // Critical: Fast-path for returning users to prevent layout shift/infinite loading feel
         if (!localStorage.getItem('pingtym-onboarded')) {
             document.write('<style>#onboarding-overlay { display: flex !important; }</style>');
         }
@@ -529,8 +539,13 @@
         </div>
     </div>
 
-    <div class="container" id="dashboard-content" hx-get="/" hx-trigger="every 15s" hx-select="#dashboard-content"
+    <!-- MAIN DASHBOARD CONTAINER -->
+    <div class="container" id="dashboard-content" 
+        hx-get="/" 
+        hx-trigger="every 5s, registryUpdate from:body" 
+        hx-select="#dashboard-content"
         hx-swap="outerHTML">
+        
         <div class="grid">
             <div class="card">
                 <div class="sub-metric">Availability</div>
@@ -626,7 +641,7 @@
                         <td>
                             <div class="trace-tooltip">
                                 <div style="display: flex; align-items: flex-end; gap: 0.5rem; height: 32px;">
-                                    <div style="font-weight: 700;">{{.AvgLatency}}ms</div>
+                                    <div style="font-weight: 700;">{{if .LastChecked.Valid}}{{.AvgLatency}}ms{{else}}--{{end}}</div>
                                     <svg width="80" height="24" viewBox="0 0 100 30" class="sparkline">
                                         <polyline points="{{sparkPoints .LatencyHistory .MaxLatency 100 30}}" />
                                     </svg>
@@ -636,6 +651,8 @@
                                     DNS: {{.LastResult.DNS.Milliseconds}}ms<br>
                                     TLS: {{.LastResult.TLS.Milliseconds}}ms<br>
                                     TTFB: {{.LastResult.TTFB.Milliseconds}}ms
+                                    {{else if not .LastChecked.Valid}}
+                                    Analysis Pending...
                                     {{else}}
                                     Error: {{.LastResult.ErrorMessage}}
                                     {{end}}
@@ -643,17 +660,21 @@
                             </div>
                         </td>
                         <td>
-                            <div class="sub-metric">{{printf "%.2f" .Uptime24h}}% (24h)</div>
+                            <div class="sub-metric">{{if .LastChecked.Valid}}{{printf "%.2f" .Uptime24h}}% (24h){{else}}Initializing...{{end}}</div>
                             <div class="uptime-bar">
-                                {{if .History}}{{range .History}}<div
-                                    class="uptime-tick {{if eq . 1}}up{{else}}down{{end}}"></div>{{end}}
-                                {{else}}{{range until 30}}<div class="uptime-tick"></div>{{end}}{{end}}
+                                {{range padHistory .History 30}}
+                                <div class="uptime-tick {{if eq . 1}}up{{else if eq . 0}}down{{end}}"></div>
+                                {{end}}
                             </div>
                         </td>
                         <td>
+                            {{if not .LastChecked.Valid}}
+                            <span class="status-badge status-probing">Probing...</span>
+                            {{else}}
                             <span class="status-badge {{if eq .LastStatus.Int64 1}}status-up{{else}}status-down{{end}}">
                                 {{if eq .LastStatus.Int64 1}}Operational{{else}}Degraded{{end}}
                             </span>
+                            {{end}}
                         </td>
                         <td>
                             <button type="button" class="delete-trigger" data-id="{{.ID}}" data-name="{{.Name}}"
@@ -704,7 +725,7 @@
                                 <span class="status-badge status-up">Compliant</span>
                                 {{end}}
                                 {{else}}
-                                <span class="sub-metric">Checking...</span>
+                                <span class="status-badge status-probing">Checking...</span>
                                 {{end}}
                             </td>
                             <td class="sub-metric">{{if .LastChecked.Valid}}{{.LastChecked.Time.Format
@@ -727,7 +748,7 @@
                     onclick="document.getElementById('addModal').style.display='none'">&times;</span>
             </div>
             <div id="add-monitor-error" class="error-banner"></div>
-            <form id="add-monitor-form" action="/add-monitor" method="POST" hx-post="/add-monitor" hx-indicator="#add-asset-spinner">
+            <form id="add-monitor-form" hx-post="/add-monitor" hx-indicator="#add-asset-spinner" hx-swap="none" onsubmit="event.preventDefault();">
                 <div style="margin-bottom: 1rem;">
                     <label class="sub-metric">Monitor Name</label>
                     <input type="text" name="name" placeholder="e.g. Primary API" required>
@@ -760,7 +781,7 @@
             <p style="color: var(--text-muted); margin-bottom: 2rem;">Are you sure you want to remove <strong id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data will be purged.</p>
             <div style="display: flex; gap: 1rem;">
                 <button class="primary" style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);" onclick="document.getElementById('deleteModal').style.display='none'">Cancel</button>
-                <form hx-post="/delete-monitor" hx-target="#dashboard-content" hx-swap="outerHTML" style="flex: 1;" onsubmit="document.getElementById('deleteModal').style.display='none'">
+                <form hx-post="/delete-monitor" hx-swap="none" style="flex: 1;" onsubmit="document.getElementById('deleteModal').style.display='none'">
                     <input type="hidden" name="id" id="delete-monitor-id">
                     <button type="submit" class="primary" style="width: 100%; justify-content: center; background: var(--danger);">Delete</button>
                 </form>
@@ -769,7 +790,6 @@
     </div>
 
     <script>
-        // Onboarding Logic
         (function () {
             const overlay = document.getElementById('onboarding-overlay');
             const msg = document.getElementById('onboarding-msg');
@@ -804,13 +824,11 @@
             }, 800);
         })();
 
-        // Modal Helpers
         function showAddModal() {
             document.getElementById('add-monitor-error').style.display = 'none';
             document.getElementById('addModal').style.display = 'block';
         }
 
-        // HTMX Loading & Error Handling
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
             if (evt.detail.elt.id === 'add-monitor-form') {
                 const btn = document.getElementById('deploy-btn');
@@ -831,7 +849,7 @@
                 btn.disabled = false;
                 btnText.innerText = 'Deploy Monitor';
                 
-                if (evt.detail.successful) {
+                if (evt.detail.xhr.status >= 200 && evt.detail.xhr.status < 300) {
                     document.getElementById('addModal').style.display = 'none';
                     evt.detail.elt.reset();
                 }
@@ -846,7 +864,6 @@
             }
         });
 
-        // Event Delegation for Deletion
         document.body.addEventListener('click', function(evt) {
             const trigger = evt.target.closest('.delete-trigger');
             if (trigger) {
@@ -875,7 +892,6 @@
             localStorage.setItem('pingtym-theme', target);
         }
 
-        // Initialize theme
         const savedTheme = localStorage.getItem('pingtym-theme');
         if (savedTheme) {
             document.documentElement.setAttribute('data-theme', savedTheme);

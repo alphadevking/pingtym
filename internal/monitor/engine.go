@@ -12,8 +12,8 @@ import (
 
 type LiveState struct {
 	mu             sync.RWMutex
-	MonitorHistory map[int][]int       // monitorID -> last 30 statuses
-	LatencyHistory map[int][]int       // monitorID -> last 20 latencies (ms)
+	MonitorHistory map[int][]int       // monitorID -> last 30 statuses [oldest...newest]
+	LatencyHistory map[int][]int       // monitorID -> last 20 latencies (ms) [oldest...newest]
 	SaaSHistory    map[string][]string // monitorID:serviceName -> last 20 statuses
 	LastResults    map[int]CheckResult // monitorID -> last full check result
 	FailureCounts  map[int]int         // monitorID -> consecutive failures
@@ -35,21 +35,22 @@ func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Append to the END (standard timeline: oldest...newest)
 	history := s.MonitorHistory[id]
-	history = append([]int{status}, history...)
+	history = append(history, status)
 	if len(history) > 30 {
-		history = history[:30]
+		history = history[1:] // Drop oldest
 	}
 	s.MonitorHistory[id] = history
 
 	latencies := s.LatencyHistory[id]
+	val := 0
 	if result.Up {
-		latencies = append([]int{int(result.Latency.Milliseconds())}, latencies...)
-	} else {
-		latencies = append([]int{0}, latencies...)
+		val = int(result.Latency.Milliseconds())
 	}
+	latencies = append(latencies, val)
 	if len(latencies) > 20 {
-		latencies = latencies[:20]
+		latencies = latencies[1:] // Drop oldest
 	}
 	s.LatencyHistory[id] = latencies
 
@@ -69,9 +70,9 @@ func (s *LiveState) updateSaaSState(monitorID int, serviceName string, status st
 	defer s.mu.Unlock()
 	key := fmt.Sprintf("%d:%s", monitorID, serviceName)
 	history := s.SaaSHistory[key]
-	history = append([]string{status}, history...)
+	history = append(history, status)
 	if len(history) > 20 {
-		history = history[:20]
+		history = history[1:]
 	}
 	s.SaaSHistory[key] = history
 }

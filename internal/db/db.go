@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -60,7 +61,7 @@ func InitDB(dataSourceName string) error {
 		} else {
 			dsn = tursoURL
 		}
-		slog.Info("Using Turso (libSQL) database")
+		slog.Info("Attempting to connect to Turso (libSQL) database")
 	} else {
 		driverName = "sqlite"
 		dsn = fmt.Sprintf("%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)", dataSourceName)
@@ -80,11 +81,15 @@ func InitDB(dataSourceName string) error {
 		DB.SetConnMaxLifetime(time.Hour)
 	}
 
-	if err = DB.Ping(); err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+	// Use context with timeout for initial handshake and table creation
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err = DB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database connectivity check failed: %w", err)
 	}
 
-	if err := createTables(); err != nil {
+	if err := createTablesContext(ctx); err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
@@ -96,7 +101,7 @@ func InitDB(dataSourceName string) error {
 	return nil
 }
 
-func createTables() error {
+func createTablesContext(ctx context.Context) error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS monitors (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,33 +154,30 @@ func createTables() error {
 	}
 
 	for _, query := range queries {
-		if _, err := DB.Exec(query); err != nil {
+		if _, err := DB.ExecContext(ctx, query); err != nil {
 			return err
 		}
 	}
+	
 	// Indices for high-performance multi-tenant lookups
-	DB.Exec("CREATE INDEX IF NOT EXISTS idx_monitors_session ON monitors(session_id)")
-	DB.Exec("CREATE INDEX IF NOT EXISTS idx_ssl_monitor ON ssl_checks(monitor_id)")
-	DB.Exec("CREATE INDEX IF NOT EXISTS idx_check_logs_composite ON check_logs(monitor_id, created_at)")
-	DB.Exec("CREATE INDEX IF NOT EXISTS idx_saas_status_monitor ON saas_service_status(monitor_id)")
+	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_monitors_session ON monitors(session_id)")
+	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_ssl_monitor ON ssl_checks(monitor_id)")
+	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_check_logs_composite ON check_logs(monitor_id, created_at)")
+	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_saas_status_monitor ON saas_service_status(monitor_id)")
 	
 	return nil
 }
 
 func migrateSchema() error {
-	// 1. Ensure monitors has created_at
 	if !columnExists("monitors", "created_at") {
-		// SQLite limitation: Cannot add column with non-constant default (like CURRENT_TIMESTAMP)
 		_, err := DB.Exec("ALTER TABLE monitors ADD COLUMN created_at DATETIME")
 		if err != nil {
 			slog.Error("Failed to add created_at column", "error", err)
 		} else {
-			// Update existing records to have a valid timestamp
 			_, _ = DB.Exec("UPDATE monitors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
 		}
 	}
 
-	// 2. Monitors Columns (Other dynamic columns)
 	columns := map[string]string{
 		"session_id":      "TEXT NOT NULL DEFAULT 'legacy'",
 		"status_page_url": "TEXT",
@@ -187,10 +189,7 @@ func migrateSchema() error {
 		}
 	}
 
-	// 2. SSL Checks Migration (ensure it has monitor_id)
 	if !columnExists("ssl_checks", "monitor_id") {
-		// This is a breaking schema change for ssl_checks, we'll recreate if needed 
-		// but for a dev tool, adding the column is safer.
 		_, _ = DB.Exec("ALTER TABLE ssl_checks ADD COLUMN monitor_id INTEGER REFERENCES monitors(id) ON DELETE CASCADE")
 	}
 

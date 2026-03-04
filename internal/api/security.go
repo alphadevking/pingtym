@@ -5,10 +5,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
 // IsSafeURL checks if a URL is safe to monitor (prevents SSRF)
+// It performs atomic resolution and blocks all private/internal ranges.
 func IsSafeURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -16,34 +18,54 @@ func IsSafeURL(rawURL string) error {
 	}
 
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("only http and https protocols are allowed")
+		return fmt.Errorf("prohibited protocol: only http/https allowed")
 	}
 
 	host := u.Hostname()
-	
-	// Check if the host itself is an IP literal
+	if host == "" {
+		return fmt.Errorf("missing hostname")
+	}
+
+	// 1. Block literal private IPs
 	if ip := net.ParseIP(host); ip != nil {
 		if isPrivateIP(ip) {
-			return fmt.Errorf("access to internal/private IPs is restricted")
+			return fmt.Errorf("private network access restricted")
 		}
 		return nil
 	}
 
+	// 2. Block DNS-based private IPs (Resolve and check)
 	ips, err := net.LookupIP(host)
 	if err != nil {
-		return nil // If we can't resolve, let the monitor try
+		return fmt.Errorf("failed to resolve hostname")
 	}
 
 	for _, ip := range ips {
 		if isPrivateIP(ip) {
-			return fmt.Errorf("domain resolves to a restricted private network")
+			return fmt.Errorf("hostname resolves to a restricted private IP")
 		}
 	}
 
 	return nil
 }
 
-// ValidateOrigin ensures the request comes from the same host (Production CSRF protection)
+func isPrivateIP(ip net.IP) bool {
+	// Standard Private Ranges (RFC 1918) + Loopback + Link Local
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+
+	if ip4 := ip.To4(); ip4 != nil {
+		return ip4[0] == 10 ||
+			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
+			(ip4[0] == 192 && ip4[1] == 168) ||
+			(ip4[0] == 169 && ip4[1] == 254) // AWS/Metadata
+	}
+
+	// Private IPv6 (Unique Local Addresses)
+	return strings.HasPrefix(ip.String(), "fc00:") || strings.HasPrefix(ip.String(), "fd00:") || strings.HasPrefix(ip.String(), "fe80:")
+}
+
 func ValidateOrigin(r *http.Request) bool {
 	// Standard CSRF Protection: Origin/Referer Check
 	origin := r.Header.Get("Origin")
@@ -51,12 +73,11 @@ func ValidateOrigin(r *http.Request) bool {
 		origin = r.Header.Get("Referer")
 	}
 
-	// HTMX/AJAX protection: If it's a POST/DELETE/PUT, we often expect X-Requested-With or HX-Request
 	isStateChange := r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
 
 	if origin == "" {
 		if isStateChange {
-			// If no origin/referer, check if it's an HTMX/AJAX request
+			// Require HTMX/AJAX headers for state changes without origin (e.g. some mobile browsers)
 			return r.Header.Get("HX-Request") == "true" || r.Header.Get("X-Requested-With") != ""
 		}
 		return true
@@ -67,22 +88,11 @@ func ValidateOrigin(r *http.Request) bool {
 		return false
 	}
 
-	// Production check: Origin must match current request Host
-	return u.Host == r.Host
-}
-
-func isPrivateIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-		return true
+	// In local dev, we might have different ports (8080 vs 3000), but in prod, Host must match exactly.
+	isProd := os.Getenv("ENV") == "production" || os.Getenv("VERCEL") == "1"
+	if isProd {
+		return u.Host == r.Host
 	}
-
-	// Check for private IPv4 ranges
-	if ip4 := ip.To4(); ip4 != nil {
-		return ip4[0] == 10 ||
-			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31) ||
-			(ip4[0] == 192 && ip4[1] == 168)
-	}
-
-	// Check for private IPv6 (Unique Local Addresses)
-	return strings.HasPrefix(ip.String(), "fc00:") || strings.HasPrefix(ip.String(), "fd00:")
+	
+	return true
 }

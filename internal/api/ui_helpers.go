@@ -6,22 +6,22 @@ import (
 	"time"
 )
 
-// GenerateSparkline calculates the SVG points for a latency history
+// GenerateSparkline calculates the SVG points for a latency history [oldest...newest]
 func GenerateSparkline(latencies []int, maxLat int, width, height int) string {
 	if len(latencies) == 0 || maxLat == 0 {
 		return ""
 	}
 
+	// For a consistent width, we always act as if we have 20 slots.
+	// Data starts from the left (index 0).
 	points := []string{}
-	stepX := width / 20 // Fixed for 20 points
+	stepX := width / 19 // 20 slots = 19 gaps
 	
 	for i, val := range latencies {
-		if val <= 0 {
-			continue
-		}
+		if i >= 20 { break }
+		if val < 0 { continue }
 		
 		x := i * stepX
-		// Scale Y to 80% of height to keep it in view
 		ratio := float64(val) / float64(maxLat)
 		if ratio > 1.0 { ratio = 1.0 }
 		y := float64(height) - (ratio * float64(height) * 0.8)
@@ -55,5 +55,14 @@ func GetTemplateFuncs() map[string]interface{} {
 		"minus":      func(a, b int) int { return a - b },
 		"sparkPoints": GenerateSparkline,
 		"formatLat":   FormatLatency,
+		"padHistory": func(history []int, size int) []int {
+			// Pad at the END so data starts from the left
+			res := make([]int, size)
+			for i := range res {
+				res[i] = -1
+			}
+			copy(res, history)
+			return res
+		},
 	}
 }

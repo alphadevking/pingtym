@@ -10,9 +10,13 @@ import (
 	"pingtym/internal/monitor"
 	"strings"
 	"sync"
+	"time"
 )
 
-var initOnce sync.Once
+var (
+	initOnce sync.Once
+	handler  http.Handler
+)
 
 // LoadEnv reads a .env file and sets environment variables
 func LoadEnv() {
@@ -32,7 +36,6 @@ func LoadEnv() {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			// Handle quoted values
 			if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
 				val = val[1 : len(val)-1]
 			}
@@ -41,24 +44,39 @@ func LoadEnv() {
 	}
 }
 
-// Setup initializes the application components
+// Setup initializes the application components with retry logic
 func Setup() {
-	// Setup structured logging
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	// Use /tmp for SQLite in Serverless environments
+	isVercel := os.Getenv("VERCEL") == "1"
+	
 	dbPath := "pingtym.db"
-	if os.Getenv("VERCEL") == "1" {
+	if isVercel {
 		dbPath = "/tmp/pingtym.db"
 	}
 
-	if err := db.InitDB(dbPath); err != nil {
-		slog.Error("Failed to initialize database", "error", err)
+	maxRetries := 3
+	var err error
+	for i := 1; i <= maxRetries; i++ {
+		err = db.InitDB(dbPath)
+		if err == nil {
+			break
+		}
+		
+		slog.Warn("Database connection attempt failed", "attempt", i, "max_retries", maxRetries, "error", err)
+		if i < maxRetries {
+			time.Sleep(2 * time.Second)
+		}
 	}
 
-	// Only start background engine if not in serverless mode
-	if os.Getenv("VERCEL") != "1" {
+	if err != nil {
+		slog.Error("FATAL: Database could not be initialized after retries. Stopping server.", "error", err)
+		// Exit process to prevent running in an unstable state
+		os.Exit(1)
+	}
+
+	if !isVercel {
 		monitor.StartEngine()
 	}
 }
@@ -69,7 +87,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		LoadEnv()
 		api.InitSession()
 		Setup()
-		api.RegisterHandlers()
+		handler = api.GetGlobalHandler()
 	})
-	http.DefaultServeMux.ServeHTTP(w, r)
+	handler.ServeHTTP(w, r)
 }

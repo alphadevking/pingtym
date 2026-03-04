@@ -30,12 +30,15 @@ func main() {
 	}
 
 	addr := fmt.Sprintf("%s:%s", host, port)
-	api.RegisterHandlers()
+	
+	// Use the central handler registration
+	handler := api.GetGlobalHandler()
 
 	server := &http.Server{
 		Addr:         addr,
+		Handler:      handler,
 		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 15 * time.Second, // Increased for Gold Standard UX traces
 		IdleTimeout:  120 * time.Second,
 	}
 
