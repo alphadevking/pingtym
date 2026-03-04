@@ -91,6 +91,11 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isHTMX := r.Header.Get("HX-Request") == "true"
+	if isHTMX {
+		slog.Info("Dashboard polling request received", "ip", getRealIP(r))
+	}
+
 	if templates == nil {
 		if err := loadTemplates(); err != nil {
 			http.Error(w, "Critical Error: Templates not found.", http.StatusInternalServerError)
@@ -130,7 +135,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 				maxLat = v
 			}
 		}
-		if maxLat < 100 { maxLat = 100 }
+		if maxLat < 100 {
+			maxLat = 100
+		}
 
 		if m.LastStatus.Valid && m.LastStatus.Int64 == 0 {
 			downCount++
@@ -183,7 +190,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	if len(monitors) > 0 {
 		oldest := monitors[0].CreatedAt
 		for _, m := range monitors {
-			if m.CreatedAt.Before(oldest) { oldest = m.CreatedAt }
+			if m.CreatedAt.Before(oldest) {
+				oldest = m.CreatedAt
+			}
 		}
 		memberSince = oldest.Format("Jan 2006")
 	}

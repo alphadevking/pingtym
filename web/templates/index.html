@@ -5,10 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pingtym Insights - Precision Infrastructure Observability</title>
-    
+
     <!-- SEO Meta Tags -->
-    <meta name="description" content="Pingtym Insights provides wire-level network tracing and real-time infrastructure observability. Monitor SSL, TTFB, and SaaS health with emerald-grade precision.">
-    <meta name="keywords" content="observability, infrastructure monitoring, network tracing, SSL monitoring, TTFB, SaaS health, emerald tracing, SRE tools">
+    <meta name="description"
+        content="Pingtym Insights provides wire-level network tracing and real-time infrastructure observability. Monitor SSL, TTFB, and SaaS health with emerald-grade precision.">
+    <meta name="keywords"
+        content="observability, infrastructure monitoring, network tracing, SSL monitoring, TTFB, SaaS health, emerald tracing, SRE tools">
     <meta name="author" content="alphadevking">
     <link rel="canonical" href="https://pingtym.vercel.app/">
 
@@ -16,19 +18,21 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://pingtym.vercel.app/">
     <meta property="og:title" content="Pingtym Insights - Precision Infrastructure Observability">
-    <meta property="og:description" content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
+    <meta property="og:description"
+        content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
     <meta property="og:image" content="https://pingtym.vercel.app/assets/logo.svg">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://pingtym.vercel.app/">
     <meta property="twitter:title" content="Pingtym Insights - Precision Infrastructure Observability">
-    <meta property="twitter:description" content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
+    <meta property="twitter:description"
+        content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
     <meta property="twitter:image" content="https://pingtym.vercel.app/assets/logo.svg">
 
     <link rel="icon"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-    <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1KtGzAtvXM+96clEIZsuUahSKBnQHQHBNMSZSkvtSMLcbbM9ENp5hiNQp9ZPxSF" crossorigin="anonymous" defer></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous" defer></script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" crossorigin="anonymous">
     <style>
         :root {
@@ -488,6 +492,34 @@
             position: relative;
         }
 
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: live-pulse 2s infinite;
+        }
+
+        @keyframes live-pulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
         @media (max-width: 640px) {
             .nav {
                 padding: 0.75rem 1rem;
@@ -510,6 +542,7 @@
 </head>
 
 <body>
+
     <div id="onboarding-overlay">
         <div class="onboarding-logo">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
@@ -539,6 +572,7 @@
                 <div style="font-size: 1.1rem; font-weight: 800;">Pingtym <span
                         style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>
             </div>
+
             <input type="text" class="search-input" placeholder="Search infrastructure..."
                 onkeyup="filterRegistry(this.value)">
             <a href="/learn"
@@ -563,9 +597,9 @@
     </div>
 
     <!-- MAIN DASHBOARD CONTAINER -->
-    <div class="container" id="dashboard-content" hx-get="/" hx-trigger="every 5s, registryUpdate from:body"
-        hx-select="#dashboard-content" hx-swap="outerHTML">
-
+    <div class="container" id="dashboard-content" hx-get="/" hx-trigger="every 15s, registryUpdate from:body"
+        hx-select="#dashboard-content" hx-swap="outerHTML" hx-headers='{"Cache-Control": "no-cache"}'
+        hx-on:htmx:after-swap="console.log('UI Updated: ' + new Date().toLocaleTimeString())">
         <div class="grid">
             <div class="card">
                 <div class="sub-metric">Availability</div>
@@ -590,7 +624,8 @@
                     <div class="sub-metric" style="word-break: break-all;">ID: <span
                             style="color: var(--text);">{{.User.SessionID}}</span></div>
                     <div class="sub-metric">IP: <span style="color: var(--text);">{{.User.IP}}</span></div>
-                    <div class="sub-metric">Access: <span style="color: var(--text);">{{.User.Tier}} Tier</span></div>
+                    <div class="sub-metric">Access: <span style="color: var(--text);">{{.User.Tier}} Tier</span>
+                    </div>
                     <div class="sub-metric">Member Since: <span style="color: var(--text);">{{.User.Since}}</span></div>
                 </div>
             </div>
@@ -756,7 +791,8 @@
                                 {{if .ExpiryDate.Valid}}
                                 {{if lt .DaysLeft 30}}
                                 <span class="status-badge"
-                                    style="background: var(--warning-light); color: var(--warning);">Renewal Due</span>
+                                    style="background: var(--warning-light); color: var(--warning);">Renewal
+                                    Due</span>
                                 {{else}}
                                 <span class="status-badge status-up">Compliant</span>
                                 {{end}}
@@ -817,7 +853,8 @@
             <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
             <h3>Confirm Decommission</h3>
             <p style="color: var(--text-muted); margin-bottom: 2rem;">Are you sure you want to remove <strong
-                    id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data will
+                    id="delete-monitor-name" style="color: var(--text);"></strong>? All historical performance data
+                will
                 be purged.</p>
             <div style="display: flex; gap: 1rem;">
                 <button class="primary"
