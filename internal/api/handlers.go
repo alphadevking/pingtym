@@ -255,6 +255,14 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 
 	name := r.FormValue("name")
 	rawURL := strings.TrimSpace(r.FormValue("url"))
+
+	// Duplicate Protection: Ensure URL isn't already monitored in this session
+	for _, m := range existing {
+		if strings.TrimRight(m.URL, "/") == strings.TrimRight(rawURL, "/") {
+			http.Error(w, "Conflict: This URL is already being monitored in your registry.", http.StatusConflict)
+			return
+		}
+	}
 	statusPageURL := r.FormValue("status_page_url")
 	webhookURL := r.FormValue("webhook_url")
 

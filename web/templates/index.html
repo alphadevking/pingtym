@@ -442,6 +442,18 @@
             transition: width 0.3s ease;
         }
 
+        .error-banner {
+            display: none;
+            background: var(--danger-light);
+            color: var(--danger);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(220, 38, 38, 0.1);
+        }
+
         @media (max-width: 640px) {
             .nav {
                 padding: 0.75rem 1rem;
@@ -507,7 +519,7 @@
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
             </button>
-            <button class="primary" onclick="document.getElementById('addModal').style.display='block'">
+            <button class="primary" onclick="showAddModal()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -556,7 +568,7 @@
             <p style="color: var(--text-muted); margin-bottom: 2rem;">Start by adding your first endpoint or status page
                 to begin monitoring.</p>
             <button class="primary" style="margin: 0 auto;"
-                onclick="document.getElementById('addModal').style.display='block'">Provision First Monitor</button>
+                onclick="showAddModal()">Provision First Monitor</button>
         </div>
         {{else}}
         <h2>Registry</h2>
@@ -644,7 +656,7 @@
                             </span>
                         </td>
                         <td>
-                            <button type="button" onclick="confirmDelete({{.ID}}, '{{.Name}}')"
+                            <button type="button" class="delete-trigger" data-id="{{.ID}}" data-name="{{.Name}}"
                                 style="background: none; border: none; cursor: pointer; color: var(--text-muted);">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
@@ -714,8 +726,8 @@
                 <span style="cursor: pointer; font-size: 1.5rem;"
                     onclick="document.getElementById('addModal').style.display='none'">&times;</span>
             </div>
-            <form action="/add-monitor" method="POST" hx-post="/add-monitor" hx-indicator="#add-asset-spinner"
-                hx-on::after-request="if(event.detail.successful) { document.getElementById('addModal').style.display='none'; this.reset(); }">
+            <div id="add-monitor-error" class="error-banner"></div>
+            <form id="add-monitor-form" action="/add-monitor" method="POST" hx-post="/add-monitor" hx-indicator="#add-asset-spinner">
                 <div style="margin-bottom: 1rem;">
                     <label class="sub-metric">Monitor Name</label>
                     <input type="text" name="name" placeholder="e.g. Primary API" required>
@@ -732,9 +744,9 @@
                     <label class="sub-metric">Alert Webhook (Optional)</label>
                     <input type="url" name="webhook_url" placeholder="Slack/Discord Webhook">
                 </div>
-                <button type="submit" class="primary" style="margin-top: 1rem; width: 100%; justify-content: center;">
+                <button type="submit" class="primary" id="deploy-btn" style="margin-top: 1rem; width: 100%; justify-content: center;">
                     <div id="add-asset-spinner" class="htmx-indicator spinner" style="margin-right: 8px;"></div>
-                    Deploy Monitor
+                    <span id="deploy-btn-text">Deploy Monitor</span>
                 </button>
             </form>
         </div>
@@ -792,6 +804,60 @@
             }, 800);
         })();
 
+        // Modal Helpers
+        function showAddModal() {
+            document.getElementById('add-monitor-error').style.display = 'none';
+            document.getElementById('addModal').style.display = 'block';
+        }
+
+        // HTMX Loading & Error Handling
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            if (evt.detail.elt.id === 'add-monitor-form') {
+                const btn = document.getElementById('deploy-btn');
+                const btnText = document.getElementById('deploy-btn-text');
+                const errorBanner = document.getElementById('add-monitor-error');
+                
+                btn.disabled = true;
+                btnText.innerText = 'Deploying...';
+                errorBanner.style.display = 'none';
+            }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.elt.id === 'add-monitor-form') {
+                const btn = document.getElementById('deploy-btn');
+                const btnText = document.getElementById('deploy-btn-text');
+                
+                btn.disabled = false;
+                btnText.innerText = 'Deploy Monitor';
+                
+                if (evt.detail.successful) {
+                    document.getElementById('addModal').style.display = 'none';
+                    evt.detail.elt.reset();
+                }
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            if (evt.detail.elt.id === 'add-monitor-form') {
+                const errorBanner = document.getElementById('add-monitor-error');
+                errorBanner.innerText = evt.detail.xhr.responseText || 'An unexpected error occurred.';
+                errorBanner.style.display = 'block';
+            }
+        });
+
+        // Event Delegation for Deletion
+        document.body.addEventListener('click', function(evt) {
+            const trigger = evt.target.closest('.delete-trigger');
+            if (trigger) {
+                const id = trigger.dataset.id;
+                const name = trigger.dataset.name;
+                document.getElementById('delete-monitor-id').value = id;
+                document.getElementById('delete-monitor-name').innerText = name;
+                document.getElementById('deleteModal').style.display = 'block';
+            }
+        });
+
         function filterRegistry(query) {
             const rows = document.querySelectorAll('.registry-row');
             const q = query.toLowerCase();
@@ -813,12 +879,6 @@
         const savedTheme = localStorage.getItem('pingtym-theme');
         if (savedTheme) {
             document.documentElement.setAttribute('data-theme', savedTheme);
-        }
-
-        function confirmDelete(id, name) {
-            document.getElementById('delete-monitor-id').value = id;
-            document.getElementById('delete-monitor-name').innerText = name;
-            document.getElementById('deleteModal').style.display = 'block';
         }
 
         window.onclick = function (event) {
