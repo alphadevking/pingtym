@@ -202,12 +202,6 @@ func watchMonitor(ctx context.Context, m db.Monitor) {
 }
 
 func PerformMonitorCheck(m *db.Monitor) {
-	var lastStatus *int
-	if m.LastStatus.Valid {
-		ls := int(m.LastStatus.Int64)
-		lastStatus = &ls
-	}
-
 	result := Ping(m.URL)
 	status := 0
 	if result.Up {
@@ -220,14 +214,15 @@ func PerformMonitorCheck(m *db.Monitor) {
 		count := State.FailureCounts[m.ID] + 1
 		State.FailureCounts[m.ID] = count
 		State.mu.Unlock()
-		if count >= 3 && (lastStatus == nil || *lastStatus == 1) {
+		if count == 3 {
 			shouldAlert = true
 		}
 	} else {
 		State.mu.Lock()
+		count := State.FailureCounts[m.ID]
 		delete(State.FailureCounts, m.ID)
 		State.mu.Unlock()
-		if lastStatus != nil && *lastStatus == 0 {
+		if count >= 3 {
 			shouldAlert = true
 		}
 	}

@@ -44,6 +44,7 @@
             --text: #ffffff;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
+            --nav-bg: rgba(3, 3, 3, 0.8);
             --accent: #34d399;
         }
 
@@ -75,7 +76,7 @@
         }
 
         .nav {
-            background: rgba(3, 3, 3, 0.8);
+            background: var(--nav-bg);
             backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border);
             padding: 1rem 2rem;
@@ -84,7 +85,7 @@
             justify-content: space-between;
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 50;
         }
 
         .logo {
@@ -96,14 +97,13 @@
         }
 
         .logo-box {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             background: var(--primary);
-            border-radius: 8px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 15px var(--primary-glow);
         }
 
         .container {
@@ -300,11 +300,11 @@
 
         .btn {
             background: var(--primary);
-            color: #000;
-            padding: 0.6rem 1.2rem;
-            border-radius: 0.5rem;
+            color: white;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.625rem;
             text-decoration: none;
-            font-weight: 700;
+            font-weight: 600;
             font-size: 0.875rem;
             transition: transform 0.2s;
         }
@@ -320,17 +320,17 @@
     <nav class="nav">
         <a href="/" class="logo">
             <div class="logo-box">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
                     stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
             </div>
-            <div style="font-weight: 800; font-size: 1.2rem;">Pingtym <span
+            <div style="font-weight: 800; font-size: 1.1rem;">Pingtym <span
                     style="font-weight: 400; color: var(--primary); font-style: italic;">Masterclass</span></div>
         </a>
-        <div style="display: flex; gap: 2rem; align-items: center;">
+        <div style="display: flex; gap: 1rem; align-items: center;">
             <a href="/"
-                style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem; font-weight: 600;">Dashboard</a>
+                style="color: var(--text-muted); text-decoration: none; font-size: 0.875rem; font-weight: 600;">Dashboard</a>
             <a href="/" class="btn">Start Monitoring</a>
         </div>
     </nav>
@@ -353,6 +353,7 @@
             <a href="#delivery" class="nav-step">4. Delivery</a>
             <a href="#validation" class="nav-step">5. Validation</a>
             <a href="#context" class="nav-step">6. Context</a>
+            <a href="#alerting" class="nav-step">7. Alerting</a>
         </nav>
 
         <!-- DNS Section -->
@@ -523,6 +524,45 @@
                         <span class="highlight">/api/v2/summary.json</span>
                         <br>
                         <span class="comment">// Correlates Infrastructure</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Alerting Section -->
+        <section id="alerting" class="lifecycle-section">
+            <span class="section-tag">Phase 07: Incident Response</span>
+            <h2>Webhook Alerting</h2>
+            <div class="grid">
+                <div class="content">
+                    <p>Observation without action is just logging. Pingtym fires real-time alerts to your
+                        <strong>Slack</strong> or <strong>Discord</strong> webhook when your infrastructure needs
+                        attention.
+                    </p>
+                    <p>The alerting engine uses a <strong>3-strike confirmation</strong> model: a DOWN alert is only
+                        sent after 3 consecutive failures, eliminating false positives from transient network blips.
+                        Recovery (UP) alerts are sent only after a confirmed outage resolves.</p>
+                    <p>To set it up, paste your Slack or Discord webhook URL in the <strong>"Alert Webhook"</strong>
+                        field when adding a monitor. That's it—no configuration files, no routing rules.</p>
+
+                    <div class="analogy">
+                        <span class="analogy-label">The Analogy</span>
+                        A smoke detector that waits to confirm real smoke before sounding the alarm—not one that
+                        screams every time you make toast.
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="code-header"><span>Webhook Payload</span><span>JSON</span></div>
+                    <div class="code-block">
+                        <span class="comment">// Sent on DOWN (after 3 failures)</span><br>
+                        <span class="comment">// and on UP (recovery)</span><br><br>
+                        {<br>
+                        &nbsp;&nbsp;"text": "🚨 <span class="highlight">Pingtym Alert</span> 🚨\n<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;Monitor: Primary API\n<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;Status: <span class="highlight">DOWN</span>\n<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;Latency: 0ms\n<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;Error: connection refused"<br>
+                        }
                     </div>
                 </div>
             </div>

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"os"
 	"pingtym/internal/db"
 	"strings"
 	"time"
@@ -35,9 +36,9 @@ type statusPageSummary struct {
 		Status string `json:"status"`
 	} `json:"components"`
 	Incidents []struct {
-		Name           string `json:"name"`
-		Status         string `json:"status"`
-		Impact         string `json:"impact"`
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		Impact          string `json:"impact"`
 		IncidentUpdates []struct {
 			Body string `json:"body"`
 		} `json:"incident_updates"`
@@ -73,15 +74,20 @@ var sharedClient = &http.Client{
 				}
 			}
 
-			if safeIP == nil {
+			if safeIP == nil && !strings.EqualFold(os.Getenv("ENV"), "development") {
 				return nil, fmt.Errorf("security: all resolved IPs are restricted")
+			}
+
+			connectIP := safeIP
+			if connectIP == nil {
+				connectIP = ips[0] // Use first IP in development mode
 			}
 
 			dialer := &net.Dialer{
 				Timeout:   5 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(safeIP.String(), port))
+			return dialer.DialContext(ctx, network, net.JoinHostPort(connectIP.String(), port))
 		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
@@ -127,10 +133,10 @@ func isPrivateIP(ip net.IP) bool {
 func Ping(targetURL string) CheckResult {
 	var start, dnsStart, dnsDone, connStart, connDone, tlsStart, tlsDone, ttfbDone time.Time
 	var remoteAddr string
-	
+
 	trace := &httptrace.ClientTrace{
-		DNSStart: func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
-		DNSDone:  func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
+		DNSStart:     func(_ httptrace.DNSStartInfo) { dnsStart = time.Now() },
+		DNSDone:      func(_ httptrace.DNSDoneInfo) { dnsDone = time.Now() },
 		ConnectStart: func(_, _ string) { connStart = time.Now() },
 		ConnectDone:  func(_, _ string, _ error) { connDone = time.Now() },
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -138,8 +144,8 @@ func Ping(targetURL string) CheckResult {
 				remoteAddr = info.Conn.RemoteAddr().String()
 			}
 		},
-		TLSHandshakeStart: func() { tlsStart = time.Now() },
-		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) { tlsDone = time.Now() },
+		TLSHandshakeStart:    func() { tlsStart = time.Now() },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, _ error) { tlsDone = time.Now() },
 		GotFirstResponseByte: func() { ttfbDone = time.Now() },
 	}
 
@@ -149,7 +155,7 @@ func Ping(targetURL string) CheckResult {
 
 	start = time.Now()
 	resp, err := sharedClient.Do(req)
-	
+
 	if err != nil {
 		return CheckResult{
 			Up:           false,
@@ -157,7 +163,7 @@ func Ping(targetURL string) CheckResult {
 			ErrorMessage: err.Error(),
 		}
 	}
-	
+
 	// Server performance is best measured by TTFB
 	ttfb := ttfbDone.Sub(start)
 	if ttfbDone.IsZero() {
@@ -167,7 +173,7 @@ func Ping(targetURL string) CheckResult {
 	// Drain body to enable reuse, but time it separately
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
-	
+
 	fullDuration := time.Since(start)
 
 	server := resp.Header.Get("Server")
@@ -227,7 +233,7 @@ func CheckSSL(domain string) (time.Time, error) {
 
 func CheckSaaSStatus(monitorID int, statusPageURL string) ([]db.SaaSServiceStatus, error) {
 	apiURL := resolveStatusPageAPI(statusPageURL)
-	
+
 	resp, err := sharedClient.Get(apiURL)
 	if err != nil {
 		return nil, err
@@ -247,8 +253,10 @@ func CheckSaaSStatus(monitorID int, statusPageURL string) ([]db.SaaSServiceStatu
 
 	var results []db.SaaSServiceStatus
 	for _, comp := range summary.Components {
-		if comp.Name == "" { continue }
-		
+		if comp.Name == "" {
+			continue
+		}
+
 		status := db.SaaSServiceStatus{
 			MonitorID:   monitorID,
 			ServiceName: comp.Name,
@@ -278,11 +286,11 @@ func resolveStatusPageAPI(rawURL string) string {
 	if err != nil {
 		return rawURL
 	}
-	
+
 	if strings.Contains(u.Host, "statuspage.io") || strings.Contains(u.Path, "summary.json") {
 		return rawURL
 	}
-	
+
 	cleanPath := strings.TrimRight(u.Path, "/")
 	return fmt.Sprintf("%s://%s%s/api/v2/summary.json", u.Scheme, u.Host, cleanPath)
 }

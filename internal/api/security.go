@@ -26,9 +26,9 @@ func IsSafeURL(rawURL string) error {
 		return fmt.Errorf("missing hostname")
 	}
 
-	// 1. Block literal private IPs
+	// 1. Block literal private IPs (skip in development)
 	if ip := net.ParseIP(host); ip != nil {
-		if isPrivateIP(ip) {
+		if isPrivateIP(ip) && !isDevelopment() {
 			return fmt.Errorf("private network access restricted")
 		}
 		return nil
@@ -40,6 +40,11 @@ func IsSafeURL(rawURL string) error {
 		return fmt.Errorf("failed to resolve hostname")
 	}
 
+	// In development mode, allow private IPs for local testing
+	if isDevelopment() {
+		return nil
+	}
+
 	for _, ip := range ips {
 		if isPrivateIP(ip) {
 			return fmt.Errorf("hostname resolves to a restricted private IP")
@@ -47,6 +52,11 @@ func IsSafeURL(rawURL string) error {
 	}
 
 	return nil
+}
+
+// isDevelopment checks ENV variable case-insensitively
+func isDevelopment() bool {
+	return strings.EqualFold(os.Getenv("ENV"), "development")
 }
 
 func isPrivateIP(ip net.IP) bool {
@@ -93,6 +103,6 @@ func ValidateOrigin(r *http.Request) bool {
 	if isProd {
 		return u.Host == r.Host
 	}
-	
+
 	return true
 }

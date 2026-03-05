@@ -294,6 +294,20 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 	statusPageURL := r.FormValue("status_page_url")
 	webhookURL := r.FormValue("webhook_url")
 
+	// Validate optional URLs against SSRF
+	if webhookURL != "" {
+		if err := IsSafeURL(webhookURL); err != nil {
+			http.Error(w, fmt.Sprintf("Webhook Security Restriction: %v", err), http.StatusForbidden)
+			return
+		}
+	}
+	if statusPageURL != "" {
+		if err := IsSafeURL(statusPageURL); err != nil {
+			http.Error(w, fmt.Sprintf("Status Page Security Restriction: %v", err), http.StatusForbidden)
+			return
+		}
+	}
+
 	m, err := db.CreateMonitor(sessionID, name, rawURL, statusPageURL, webhookURL)
 	if err != nil {
 		slog.Error("Failed to create monitor", "sessionID", sessionID, "url", rawURL, "error", err)

@@ -35,8 +35,13 @@
     <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous" defer></script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" crossorigin="anonymous">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         :root {
             --primary: #10b981;
+            --primary-glow: rgba(16, 185, 129, 0.4);
             --primary-light: #ecfdf5;
             --success: #059669;
             --success-light: #ecfdf5;
@@ -49,7 +54,7 @@
             --text: #1e293b;
             --text-muted: #64748b;
             --border: #e2e8f0;
-            --nav-bg: #ffffff;
+            --nav-bg: rgba(255, 255, 255, 0.8);
             --table-header: #f9fafb;
             --modal-overlay: rgba(15, 23, 42, 0.5);
             --sparkline-stroke: var(--primary);
@@ -57,11 +62,11 @@
 
         [data-theme="dark"] {
             --bg: #050505;
-            --card: #0f0f0f;
+            --card: rgba(15, 15, 15, 0.7);
             --text: #f8fafc;
             --text-muted: #a1a1aa;
-            --border: #1f1f1f;
-            --nav-bg: #0f0f0f;
+            --border: rgba(255, 255, 255, 0.1);
+            --nav-bg: rgba(5, 5, 5, 0.8);
             --table-header: #121212;
             --primary-light: rgba(16, 185, 129, 0.15);
             --success-light: rgba(5, 150, 105, 0.15);
@@ -74,11 +79,11 @@
         @media (prefers-color-scheme: dark) {
             :root:not([data-theme="light"]) {
                 --bg: #050505;
-                --card: #0f0f0f;
+                --card: rgba(15, 15, 15, 0.7);
                 --text: #f8fafc;
                 --text-muted: #a1a1aa;
-                --border: #1f1f1f;
-                --nav-bg: #0f0f0f;
+                --border: rgba(255, 255, 255, 0.1);
+                --nav-bg: rgba(5, 5, 5, 0.8);
                 --table-header: #121212;
                 --primary-light: rgba(16, 185, 129, 0.15);
                 --success-light: rgba(5, 150, 105, 0.15);
@@ -95,15 +100,30 @@
             color: var(--text);
             margin: 0;
             padding: 0;
-            line-height: 1.5;
+            line-height: 1.6;
             -webkit-font-smoothing: antialiased;
             transition: background 0.2s, color 0.2s;
+            overflow-x: hidden;
+        }
+
+        /* Background Glow */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% -20%, var(--primary-glow) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: -1;
         }
 
         .nav {
             background: var(--nav-bg);
+            backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border);
-            padding: 0.75rem 1.5rem;
+            padding: 1rem 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -155,16 +175,17 @@
         h2,
         h3 {
             margin: 0 0 1.25rem 0;
-            font-weight: 700;
-            letter-spacing: -0.025em;
+            font-weight: 800;
+            letter-spacing: -0.03em;
         }
 
         .table-wrapper {
             background: var(--card);
             border-radius: 1rem;
             border: 1px solid var(--border);
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            -webkit-overflow-scrolling: touch;
         }
 
         table {
@@ -274,11 +295,12 @@
             height: 100%;
             background-color: var(--modal-overlay);
             backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
         }
 
         .modal-content {
             background-color: var(--card);
-            margin: 10% auto;
             padding: 2rem;
             border-radius: 1rem;
             width: 90%;
@@ -520,18 +542,134 @@
             }
         }
 
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
             .nav {
                 padding: 0.75rem 1rem;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .search-input {
+                width: 160px;
+                font-size: 0.8rem;
+                padding: 0.4rem 0.75rem;
+            }
+
+            .container {
+                padding: 0 0.75rem;
+                margin: 1.5rem auto;
             }
 
             .grid {
                 grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .card {
+                padding: 1.25rem;
             }
 
             .metric {
                 font-size: 1.25rem;
             }
+
+            h2 {
+                font-size: 1.25rem;
+            }
+
+            table {
+                min-width: 600px;
+            }
+
+            th,
+            td {
+                padding: 0.75rem 1rem;
+                font-size: 0.8rem;
+            }
+
+            .modal-content {
+                margin: 5% auto;
+                padding: 1.5rem;
+                width: 95%;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .uptime-tick {
+                width: 3px;
+                height: 14px;
+            }
+
+            .badge-pill {
+                font-size: 0.55rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .nav {
+                padding: 0.5rem 0.75rem;
+            }
+
+            .search-input {
+                display: none;
+            }
+
+            .container {
+                padding: 0 0.5rem;
+                margin: 1rem auto;
+            }
+
+            .card {
+                padding: 1rem;
+                border-radius: 0.75rem;
+            }
+
+            .metric {
+                font-size: 1.1rem;
+            }
+
+            .sub-metric {
+                font-size: 0.75rem;
+            }
+
+            table {
+                min-width: 500px;
+            }
+
+            th,
+            td {
+                padding: 0.625rem 0.75rem;
+                font-size: 0.75rem;
+            }
+
+            .modal-content {
+                margin: 2% auto;
+                padding: 1.25rem;
+                border-radius: 0.75rem;
+            }
+
+            button.primary {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+            }
+
+            .uptime-tick {
+                width: 2px;
+                height: 12px;
+            }
+
+            .empty-state {
+                padding: 2rem 1rem;
+            }
+        }
+
+        footer {
+            text-align: center;
+            padding: 4rem 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 4rem;
         }
     </style>
     <script>
@@ -810,6 +948,11 @@
             </div>
         </div>
         {{end}}
+
+        <footer>
+            Built with ❤️ for Site Reliability Engineers who demand zero-latency insights.<br>
+            &copy; 2026 Pingtym Insights. Precision First.
+        </footer>
     </div>
 
     <!-- Add Monitor Modal -->
@@ -908,7 +1051,7 @@
 
         function showAddModal() {
             document.getElementById('add-monitor-error').style.display = 'none';
-            document.getElementById('addModal').style.display = 'block';
+            document.getElementById('addModal').style.display = 'flex';
         }
 
         document.body.addEventListener('htmx:beforeRequest', function (evt) {
@@ -953,7 +1096,7 @@
                 const name = trigger.dataset.name;
                 document.getElementById('delete-monitor-id').value = id;
                 document.getElementById('delete-monitor-name').innerText = name;
-                document.getElementById('deleteModal').style.display = 'block';
+                document.getElementById('deleteModal').style.display = 'flex';
             }
         });
 
