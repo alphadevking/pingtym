@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./web/assets/logo.svg" width="80" height="80" />
+<img src="./web/assets/logo.png" width="80" height="80" />
 
 # Pingtym Insights
 **The Precision Observability Platform for Modern Infrastructure.**

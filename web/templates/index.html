@@ -20,7 +20,7 @@
     <meta property="og:title" content="Pingtym Insights - Precision Infrastructure Observability">
     <meta property="og:description"
         content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
-    <meta property="og:image" content="https://pingtym.vercel.app/assets/logo.svg">
+    <meta property="og:image" content="/assets/logo.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
@@ -28,10 +28,11 @@
     <meta property="twitter:title" content="Pingtym Insights - Precision Infrastructure Observability">
     <meta property="twitter:description"
         content="Wire-level network tracing and real-time infrastructure observability. Emerald-grade precision for modern SREs.">
-    <meta property="twitter:image" content="https://pingtym.vercel.app/assets/logo.svg">
+    <meta property="twitter:image" content="/assets/logo.png">
 
-    <link rel="icon"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="/assets/logo.png">
+
+    <link rel="icon" href="/assets/logo.png">
     <script src="https://unpkg.com/htmx.org@1.9.10" crossorigin="anonymous" defer></script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css" crossorigin="anonymous">
     <style>
@@ -432,7 +433,6 @@
         .onboarding-logo {
             width: 64px;
             height: 64px;
-            background: var(--primary);
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -683,10 +683,7 @@
 
     <div id="onboarding-overlay">
         <div class="onboarding-logo">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
+            <img src="/assets/logo.png" alt="Pingtym Logo" style="width: 32px; height: 32px; object-fit: contain;">
         </div>
         <div class="onboarding-text" id="onboarding-msg">Initializing Secure Session...</div>
         <div
@@ -699,13 +696,10 @@
     <div id="progress-bar"></div>
     <div class="nav">
         <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
                 <div
-                    style="width: 28px; height: 28px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                    </svg>
+                    style="width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white;">
+                    <img src="/assets/logo.png" alt="Logo" style="width: 36px; height: 36px; object-fit: contain;">
                 </div>
                 <div style="font-size: 1.1rem; font-weight: 800;">Pingtym <span
                         style="font-weight: 400; font-style: italic; color: var(--primary);">Insights</span></div>

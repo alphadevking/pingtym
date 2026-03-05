@@ -20,7 +20,7 @@
     <meta property="og:title" content="Observability Masterclass | Pingtym Insights">
     <meta property="og:description"
         content="Deep dive into the wire-level metrics that power modern infrastructure. Understand the 'why' behind the numbers.">
-    <meta property="og:image" content="https://pingtym.vercel.app/assets/logo.svg">
+    <meta property="og:image" content="/assets/logo.png">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
@@ -28,10 +28,11 @@
     <meta property="twitter:title" content="Observability Masterclass | Pingtym Insights">
     <meta property="twitter:description"
         content="Master the wire-level metrics of network performance. DNS, TLS, TTFB, and Transfer explained.">
-    <meta property="twitter:image" content="https://pingtym.vercel.app/assets/logo.svg">
+    <meta property="twitter:image" content="/assets/logo.png">
 
-    <link rel="icon"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2310b981'/%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="/assets/logo.png">
+
+    <link rel="icon" href="/assets/logo.png">
     <link rel="preconnect" href="https://rsms.me/">
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 
@@ -91,15 +92,20 @@
         .logo {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.4rem;
             text-decoration: none;
             color: inherit;
         }
 
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+
         .logo-box {
-            width: 28px;
-            height: 28px;
-            background: var(--primary);
+            width: 36px;
+            height: 36px;
             border-radius: 6px;
             display: flex;
             align-items: center;
@@ -320,10 +326,7 @@
     <nav class="nav">
         <a href="/" class="logo">
             <div class="logo-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
+                <img class="logo-icon" src="/assets/logo.png" alt="Logo">
             </div>
             <div style="font-weight: 800; font-size: 1.1rem;">Pingtym <span
                     style="font-weight: 400; color: var(--primary); font-style: italic;">Masterclass</span></div>

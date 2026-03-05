@@ -49,7 +49,7 @@ func RegisterHandlers() {
 		http.HandleFunc("/sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFileFS(w, r, web.TemplateFS, "assets/sitemap.xml")
 		})
-		http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(web.TemplateFS))))
+		http.Handle("/assets/", http.FileServer(http.FS(web.TemplateFS)))
 		http.HandleFunc("/add-monitor", handleAddMonitor)
 		http.HandleFunc("/delete-monitor", handleDeleteMonitor)
 		http.HandleFunc("/api/cron", handleCron)
@@ -393,7 +393,5 @@ func handleCron(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleFavicon(w http.ResponseWriter, r *http.Request) {
-	favicon := `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='#10b981'/><polyline points='22 12 18 12 15 21 9 3 6 12 2 12' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>`
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Write([]byte(favicon))
+	http.ServeFileFS(w, r, web.TemplateFS, "assets/logo.png")
 }
