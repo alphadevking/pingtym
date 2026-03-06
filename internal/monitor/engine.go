@@ -124,11 +124,12 @@ func RunGlobalCheck() {
 	slog.Info("Executing global monitoring sweep...")
 	monitors, _ := db.GetAllActiveMonitors()
 	var wg sync.WaitGroup
+	var saasWg sync.WaitGroup // Tracks detached SaaS status goroutines
 	for _, m := range monitors {
 		wg.Add(1)
 		go func(mon db.Monitor) {
 			defer wg.Done()
-			PerformMonitorCheck(&mon)
+			PerformMonitorCheck(&mon, &saasWg)
 		}(m)
 	}
 	sslChecks, _ := db.GetAllActiveSSLChecks()
@@ -140,6 +141,7 @@ func RunGlobalCheck() {
 		}(s)
 	}
 	wg.Wait()
+	saasWg.Wait() // Critical: wait for all SaaS writes before returning (Vercel serverless)
 }
 
 func startCleanupTask() {
@@ -201,7 +203,10 @@ func watchMonitor(ctx context.Context, m db.Monitor) {
 	}
 }
 
-func PerformMonitorCheck(m *db.Monitor) {
+// PerformMonitorCheck runs a full check for a single monitor.
+// saasWg (optional) is used by RunGlobalCheck to track SaaS goroutines in
+// serverless environments where the process exits after wg.Wait() returns.
+func PerformMonitorCheck(m *db.Monitor, saasWg ...*sync.WaitGroup) {
 	result := Ping(m.URL)
 	status := 0
 	if result.Up {
@@ -242,9 +247,19 @@ func PerformMonitorCheck(m *db.Monitor) {
 		slog.Error("Failed to save check log", "id", m.ID, "error", err)
 	}
 
-	// LATENCY FIX: Move SaaS checks off the critical monitoring path
+	// LATENCY FIX: Move SaaS checks off the critical monitoring path.
+	// If a saasWg is provided (e.g. from RunGlobalCheck in serverless), track the
+	// goroutine so it completes before the process exits.
 	if m.StatusPageURL.Valid && m.StatusPageURL.String != "" {
+		var wg *sync.WaitGroup
+		if len(saasWg) > 0 && saasWg[0] != nil {
+			wg = saasWg[0]
+			wg.Add(1)
+		}
 		go func(id int, pageURL string) {
+			if wg != nil {
+				defer wg.Done()
+			}
 			statuses, err := CheckSaaSStatus(id, pageURL)
 			if err != nil {
 				slog.Warn("Failed to check SaaS status", "id", id, "url", pageURL, "error", err)
