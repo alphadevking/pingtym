@@ -693,9 +693,10 @@ func parseGCP(ctx context.Context, monitorID int) ([]db.SaaSServiceStatus, error
 
 	for prodName, statusInfo := range affectedProds {
 		statusStr := "major_outage"
-		if statusInfo.impact == "low" {
+		switch statusInfo.impact {
+		case "low":
 			statusStr = "degraded_performance"
-		} else if statusInfo.impact == "medium" {
+		case "medium":
 			statusStr = "partial_outage"
 		}
 
@@ -994,9 +995,10 @@ func parseBetterStack(ctx context.Context, monitorID int, baseURL string) ([]db.
 
 	// BetterStack: status can be 'UP', 'HAS_ISSUES', 'DOWN'
 	// We only want to flag an outage if it's explicitly non-UP
-	if rawStatus == "DOWN" || rawStatus == "ERROR" {
+	switch rawStatus {
+	case "DOWN", "ERROR":
 		status = "major_outage"
-	} else if rawStatus == "HAS_ISSUES" || rawStatus == "DEGRADED" || rawStatus == "MAINTENANCE" {
+	case "HAS_ISSUES", "DEGRADED", "MAINTENANCE":
 		status = "partial_outage"
 	}
 
