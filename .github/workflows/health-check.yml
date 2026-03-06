@@ -1,0 +1,32 @@
+name: Pingtym Health Check
+
+on:
+  schedule:
+    # Runs every 5 minutes. GitHub Actions minimum is 5 min.
+    # Note: may occasionally be delayed up to 15 min during peak load.
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
+
+jobs:
+  run-checks:
+    name: Run Global Monitor Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Run Global Monitoring Engine (Direct Worker)
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          echo "Starting Pingtym Worker Node..."
+          go run cmd/cron/main.go

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"pingtym/internal/db"
 	"pingtym/internal/monitor"
 	"pingtym/web"
@@ -52,7 +51,6 @@ func RegisterHandlers() {
 		http.Handle("/assets/", http.FileServer(http.FS(web.TemplateFS)))
 		http.HandleFunc("/add-monitor", handleAddMonitor)
 		http.HandleFunc("/delete-monitor", handleDeleteMonitor)
-		http.HandleFunc("/api/cron", handleCron)
 	})
 }
 
@@ -372,24 +370,6 @@ func handleDeleteMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-func handleCron(w http.ResponseWriter, r *http.Request) {
-	secret := os.Getenv("CRON_SECRET")
-	if secret != "" && r.Header.Get("Authorization") != "Bearer "+secret {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	isProd := os.Getenv("VERCEL") == "1" || os.Getenv("ENV") == "production"
-	if secret == "" && isProd {
-		http.Error(w, "Configuration Missing", http.StatusForbidden)
-		return
-	}
-
-	monitor.RunGlobalCheck()
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
 }
 
 func handleFavicon(w http.ResponseWriter, r *http.Request) {

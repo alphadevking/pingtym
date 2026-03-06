@@ -15,11 +15,5 @@
       "src": "/(.*)",
       "dest": "api/index.go"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "* * * * *"
-    }
   ]
 }
