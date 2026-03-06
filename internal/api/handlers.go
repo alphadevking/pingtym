@@ -115,17 +115,41 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	for _, m := range monitors {
 		statuses, _ := db.GetSaaSStatuses(m.ID)
-		history := monitor.State.GetMonitorHistory(m.ID)
-		lastRes := monitor.State.GetLastResult(m.ID)
+
+		logs, _ := db.GetRecentLogs(m.ID, 30)
+		var history []int
+		var latencyHistory []int
+		for i := len(logs) - 1; i >= 0; i-- {
+			history = append(history, logs[i].Status)
+			latencyHistory = append(latencyHistory, logs[i].LatencyMs)
+		}
+
+		var lastRes monitor.CheckResult
+		if len(logs) > 0 {
+			last := logs[0]
+			lastRes = monitor.CheckResult{
+				Up:           last.Status == 1,
+				Latency:      time.Duration(last.LatencyMs) * time.Millisecond,
+				DNS:          time.Duration(last.DNSMs) * time.Millisecond,
+				TLS:          time.Duration(last.TLSMs) * time.Millisecond,
+				TTFB:         time.Duration(last.TTFBMs) * time.Millisecond,
+				FullDuration: time.Duration(last.TotalMs) * time.Millisecond,
+				ErrorMessage: last.ErrorMessage,
+			}
+		}
 
 		for i := range statuses {
-			statuses[i].History = monitor.State.GetSaaSHistory(m.ID, statuses[i].ServiceName)
+			saasLogs, _ := db.GetRecentSaaSLogStatuses(m.ID, statuses[i].ServiceName, 30)
+			var sh []string
+			for j := len(saasLogs) - 1; j >= 0; j-- {
+				sh = append(sh, saasLogs[j])
+			}
+			statuses[i].History = sh
 		}
 
 		u24h, _ := db.GetUptimePercentage(m.ID, 24*time.Hour)
 		u7d, _ := db.GetUptimePercentage(m.ID, 7*24*time.Hour)
 		avgLat, _ := db.GetAverageLatency(m.ID, 24*time.Hour)
-		latencyHistory := monitor.State.GetLatencyHistory(m.ID)
 
 		maxLat := 0
 		for _, v := range latencyHistory {

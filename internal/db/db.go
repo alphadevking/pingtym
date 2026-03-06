@@ -46,6 +46,16 @@ type SSLCheck struct {
 	LastChecked sql.NullTime
 }
 
+type CheckLog struct {
+	Status       int
+	LatencyMs    int
+	DNSMs        int
+	TLSMs        int
+	TTFBMs       int
+	TotalMs      int
+	ErrorMessage string
+}
+
 func InitDB(dataSourceName string) error {
 	var err error
 	var driverName string
@@ -128,6 +138,10 @@ func createTablesContext(ctx context.Context) error {
 			monitor_id INTEGER,
 			status INTEGER,
 			latency_ms INTEGER,
+			dns_ms INTEGER DEFAULT 0,
+			tls_ms INTEGER DEFAULT 0,
+			ttfb_ms INTEGER DEFAULT 0,
+			total_ms INTEGER DEFAULT 0,
 			error_message TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY(monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
@@ -158,13 +172,13 @@ func createTablesContext(ctx context.Context) error {
 			return err
 		}
 	}
-	
+
 	// Indices for high-performance multi-tenant lookups
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_monitors_session ON monitors(session_id)")
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_ssl_monitor ON ssl_checks(monitor_id)")
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_check_logs_composite ON check_logs(monitor_id, created_at)")
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_saas_status_monitor ON saas_service_status(monitor_id)")
-	
+
 	return nil
 }
 
@@ -186,6 +200,18 @@ func migrateSchema() error {
 	for col, definition := range columns {
 		if !columnExists("monitors", col) {
 			_, _ = DB.Exec(fmt.Sprintf("ALTER TABLE monitors ADD COLUMN %s %s", col, definition))
+		}
+	}
+
+	checkLogCols := map[string]string{
+		"dns_ms":   "INTEGER DEFAULT 0",
+		"tls_ms":   "INTEGER DEFAULT 0",
+		"ttfb_ms":  "INTEGER DEFAULT 0",
+		"total_ms": "INTEGER DEFAULT 0",
+	}
+	for col, definition := range checkLogCols {
+		if !columnExists("check_logs", col) {
+			_, _ = DB.Exec(fmt.Sprintf("ALTER TABLE check_logs ADD COLUMN %s %s", col, definition))
 		}
 	}
 
@@ -215,7 +241,7 @@ func PruneLogs(days int) error {
 
 func CreateMonitor(sessionID, name, url, statusPageURL, webhookURL string) (Monitor, error) {
 	now := time.Now().UTC()
-	res, err := DB.Exec("INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?)", 
+	res, err := DB.Exec("INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
 		sessionID, name, url, statusPageURL, webhookURL, now)
 	if err != nil {
 		return Monitor{}, err
@@ -282,10 +308,49 @@ func UpdateMonitorStatus(id int, status int) error {
 	return err
 }
 
-func SaveLog(monitorID int, status int, latency int, errMsg string) error {
-	_, err := DB.Exec("INSERT INTO check_logs (monitor_id, status, latency_ms, error_message) VALUES (?, ?, ?, ?)",
-		monitorID, status, latency, errMsg)
+func SaveLog(monitorID int, status int, latency int, dnsMs, tlsMs, ttfbMs, totalMs int, errMsg string) error {
+	_, err := DB.Exec("INSERT INTO check_logs (monitor_id, status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		monitorID, status, latency, dnsMs, tlsMs, ttfbMs, totalMs, errMsg)
 	return err
+}
+
+func GetRecentLogs(monitorID int, limit int) ([]CheckLog, error) {
+	rows, err := DB.Query(`
+		SELECT status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message 
+		FROM check_logs 
+		WHERE monitor_id = ? 
+		ORDER BY created_at DESC LIMIT ?`, monitorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []CheckLog
+	for rows.Next() {
+		var l CheckLog
+		var dns, tls, ttfb, total sql.NullInt64
+		var errMsg sql.NullString
+		if err := rows.Scan(&l.Status, &l.LatencyMs, &dns, &tls, &ttfb, &total, &errMsg); err != nil {
+			return nil, err
+		}
+		if dns.Valid {
+			l.DNSMs = int(dns.Int64)
+		}
+		if tls.Valid {
+			l.TLSMs = int(tls.Int64)
+		}
+		if ttfb.Valid {
+			l.TTFBMs = int(ttfb.Int64)
+		}
+		if total.Valid {
+			l.TotalMs = int(total.Int64)
+		}
+		if errMsg.Valid {
+			l.ErrorMessage = errMsg.String
+		}
+		logs = append(logs, l)
+	}
+	return logs, nil
 }
 
 func GetSSLChecks(sessionID string) ([]SSLCheck, error) {
@@ -377,6 +442,25 @@ func SaveSaaSStatusLog(monitorID int, serviceName, status string) error {
 	_, err := DB.Exec("INSERT INTO saas_status_logs (monitor_id, service_name, status) VALUES (?, ?, ?)",
 		monitorID, serviceName, status)
 	return err
+}
+
+func GetRecentSaaSLogStatuses(monitorID int, serviceName string, limit int) ([]string, error) {
+	rows, err := DB.Query(`SELECT status FROM saas_status_logs WHERE monitor_id = ? AND service_name = ? ORDER BY created_at DESC LIMIT ?`,
+		monitorID, serviceName, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		logs = append(logs, status)
+	}
+	return logs, nil
 }
 
 func GetSaaSStatuses(monitorID int) ([]SaaSServiceStatus, error) {

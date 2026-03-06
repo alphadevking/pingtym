@@ -12,10 +12,6 @@ import (
 
 type LiveState struct {
 	mu             sync.RWMutex
-	MonitorHistory map[int][]int       // monitorID -> last 30 statuses [oldest...newest]
-	LatencyHistory map[int][]int       // monitorID -> last 20 latencies (ms) [oldest...newest]
-	SaaSHistory    map[string][]string // monitorID:serviceName -> last 20 statuses
-	LastResults    map[int]CheckResult // monitorID -> last full check result
 	FailureCounts  map[int]int         // monitorID -> consecutive failures
 }
 
@@ -23,80 +19,17 @@ var (
 	monitorContexts sync.Map // map[int]context.CancelFunc
 	sslContexts     sync.Map // map[int]context.CancelFunc (keyed by monitorID)
 	State           = &LiveState{
-		MonitorHistory: make(map[int][]int),
-		LatencyHistory: make(map[int][]int),
-		SaaSHistory:    make(map[string][]string),
-		LastResults:    make(map[int]CheckResult),
 		FailureCounts:  make(map[int]int),
 	}
 )
 
+// We only need to track failures for alerting. Memory history is now DB-backed.
 func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	history := s.MonitorHistory[id]
-	history = append(history, status)
-	if len(history) > 30 {
-		history = history[1:]
-	}
-	s.MonitorHistory[id] = history
-
-	latencies := s.LatencyHistory[id]
-	val := 0
-	if result.Up {
-		val = int(result.Latency.Milliseconds())
-	}
-	latencies = append(latencies, val)
-	if len(latencies) > 20 {
-		latencies = latencies[1:]
-	}
-	s.LatencyHistory[id] = latencies
-
-	s.LastResults[id] = result
-}
-
-func (s *LiveState) GetLatencyHistory(id int) []int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	res := make([]int, len(s.LatencyHistory[id]))
-	copy(res, s.LatencyHistory[id])
-	return res
+	// Alert logic doesn't strictly need state updates here anymore, it's handled in PerformMonitorCheck.
 }
 
 func (s *LiveState) updateSaaSState(monitorID int, serviceName string, status string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := fmt.Sprintf("%d:%s", monitorID, serviceName)
-	history := s.SaaSHistory[key]
-	history = append(history, status)
-	if len(history) > 20 {
-		history = history[1:]
-	}
-	s.SaaSHistory[key] = history
-}
-
-func (s *LiveState) GetMonitorHistory(id int) []int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	res := make([]int, len(s.MonitorHistory[id]))
-	copy(res, s.MonitorHistory[id])
-	return res
-}
-
-func (s *LiveState) GetLastResult(id int) CheckResult {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.LastResults[id]
-}
-
-func (s *LiveState) GetSaaSHistory(monitorID int, serviceName string) []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	key := fmt.Sprintf("%d:%s", monitorID, serviceName)
-	res := make([]string, len(s.SaaSHistory[key]))
-	copy(res, s.SaaSHistory[key])
-	return res
+	// Memory history is now DB-backed. Let Vercel read it from there.
 }
 
 func StartEngine() {
@@ -243,7 +176,7 @@ func PerformMonitorCheck(m *db.Monitor, saasWg ...*sync.WaitGroup) {
 	if err := db.UpdateMonitorStatus(m.ID, status); err != nil {
 		slog.Error("Failed to update monitor status", "id", m.ID, "error", err)
 	}
-	if err := db.SaveLog(m.ID, status, int(result.Latency.Milliseconds()), result.ErrorMessage); err != nil {
+	if err := db.SaveLog(m.ID, status, int(result.Latency.Milliseconds()), int(result.DNS.Milliseconds()), int(result.TLS.Milliseconds()), int(result.TTFB.Milliseconds()), int(result.FullDuration.Milliseconds()), result.ErrorMessage); err != nil {
 		slog.Error("Failed to save check log", "id", m.ID, "error", err)
 	}
 
