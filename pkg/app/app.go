@@ -18,7 +18,7 @@ var (
 	handler  http.Handler
 )
 
-// LoadEnv reads a .env file and sets environment variables
+// LoadEnv reads a .env file and sets environment variables that are not already set.
 func LoadEnv() {
 	file, err := os.Open(".env")
 	if err != nil {
@@ -39,8 +39,14 @@ func LoadEnv() {
 			if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
 				val = val[1 : len(val)-1]
 			}
-			os.Setenv(key, val)
+			// Only set if not already present — never clobber real env vars with .env values.
+			if _, exists := os.LookupEnv(key); !exists {
+				os.Setenv(key, val) //nolint:errcheck
+			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Warn("Error reading .env file", "error", err)
 	}
 }
 

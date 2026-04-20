@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -24,11 +26,9 @@ var templates *template.Template
 func loadTemplates() error {
 	var err error
 	templates, err = template.New("index.html").Funcs(GetTemplateFuncs()).ParseFS(web.TemplateFS, "templates/index.html", "templates/learn.html")
-
 	if err != nil {
 		return fmt.Errorf("failed to parse template from embed: %w", err)
 	}
-
 	slog.Info("Templates loaded successfully from embedded filesystem")
 	return nil
 }
@@ -60,10 +60,16 @@ func GetGlobalHandler() http.Handler {
 }
 
 func handleLearn(w http.ResponseWriter, r *http.Request) {
-	if err := templates.ExecuteTemplate(w, "learn.html", nil); err != nil {
-		slog.Error("Failed to execute learn template", "error", err)
+	ctx := r.Context()
+	reqLog := slog.With("request_id", RequestIDFromCtx(ctx))
+
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, "learn.html", nil); err != nil {
+		reqLog.Error("Failed to execute learn template", "error", err)
 		http.Error(w, "An internal error occurred", http.StatusInternalServerError)
+		return
 	}
+	w.Write(buf.Bytes()) //nolint:errcheck
 }
 
 type MonitorView struct {
@@ -89,9 +95,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	reqLog := slog.With("request_id", RequestIDFromCtx(ctx))
+
 	isHTMX := r.Header.Get("HX-Request") == "true"
 	if isHTMX {
-		slog.Info("Dashboard polling request received", "ip", getRealIP(r))
+		reqLog.Info("Dashboard polling request received", "ip", getRealIP(r))
 	}
 
 	if templates == nil {
@@ -102,9 +111,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID := getSessionID(w, r)
-	monitors, err := db.GetMonitors(sessionID)
+	monitors, err := db.GetMonitors(ctx, sessionID)
 	if err != nil {
-		slog.Error("Failed to fetch monitors", "sessionID", sessionID, "error", err)
+		reqLog.Error("Failed to fetch monitors", "sessionID", sessionID, "error", err)
 		http.Error(w, "Unable to load infrastructure registry.", http.StatusInternalServerError)
 		return
 	}
@@ -114,11 +123,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	downCount := 0
 
 	for _, m := range monitors {
-		statuses, _ := db.GetSaaSStatuses(m.ID)
+		statuses, err := db.GetSaaSStatuses(ctx, m.ID)
+		if err != nil {
+			reqLog.Warn("Failed to load SaaS statuses", "monitor_id", m.ID, "error", err)
+		}
 
-		logs, _ := db.GetRecentLogs(m.ID, 30)
-		var history []int
-		var latencyHistory []int
+		logs, err := db.GetRecentLogs(ctx, m.ID, 30)
+		if err != nil {
+			reqLog.Warn("Failed to load check logs", "monitor_id", m.ID, "error", err)
+		}
+		history := make([]int, 0, len(logs))
+		latencyHistory := make([]int, 0, len(logs))
 		for i := len(logs) - 1; i >= 0; i-- {
 			history = append(history, logs[i].Status)
 			latencyHistory = append(latencyHistory, logs[i].LatencyMs)
@@ -139,17 +154,29 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for i := range statuses {
-			saasLogs, _ := db.GetRecentSaaSLogStatuses(m.ID, statuses[i].ServiceName, 30)
-			var sh []string
+			saasLogs, err := db.GetRecentSaaSLogStatuses(ctx, m.ID, statuses[i].ServiceName, 30)
+			if err != nil {
+				reqLog.Warn("Failed to load SaaS log statuses", "monitor_id", m.ID, "service", statuses[i].ServiceName, "error", err)
+			}
+			sh := make([]string, 0, len(saasLogs))
 			for j := len(saasLogs) - 1; j >= 0; j-- {
 				sh = append(sh, saasLogs[j])
 			}
 			statuses[i].History = sh
 		}
 
-		u24h, _ := db.GetUptimePercentage(m.ID, 24*time.Hour)
-		u7d, _ := db.GetUptimePercentage(m.ID, 7*24*time.Hour)
-		avgLat, _ := db.GetAverageLatency(m.ID, 24*time.Hour)
+		u24h, err := db.GetUptimePercentage(ctx, m.ID, 24*time.Hour)
+		if err != nil {
+			reqLog.Warn("Failed to load 24h uptime", "monitor_id", m.ID, "error", err)
+		}
+		u7d, err := db.GetUptimePercentage(ctx, m.ID, 7*24*time.Hour)
+		if err != nil {
+			reqLog.Warn("Failed to load 7d uptime", "monitor_id", m.ID, "error", err)
+		}
+		avgLat, err := db.GetAverageLatency(ctx, m.ID, 24*time.Hour)
+		if err != nil {
+			reqLog.Warn("Failed to load average latency", "monitor_id", m.ID, "error", err)
+		}
 
 		maxLat := 0
 		for _, v := range latencyHistory {
@@ -194,9 +221,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		healthColor = "var(--danger)"
 	}
 
-	sslChecks, err := db.GetSSLChecks(sessionID)
+	sslChecks, err := db.GetSSLChecks(ctx, sessionID)
 	if err != nil {
-		slog.Error("Failed to fetch SSL checks", "sessionID", sessionID, "error", err)
+		reqLog.Error("Failed to fetch SSL checks", "sessionID", sessionID, "error", err)
 	}
 
 	sslViews := []SSLView{}
@@ -219,10 +246,14 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		memberSince = oldest.Format("Jan 2006")
 	}
 
-	// Dynamic Tier Logic
 	tier := "Standard"
 	if len(monitors) > 5 {
 		tier = "Enterprise"
+	}
+
+	identityPrefix := sessionID
+	if len(sessionID) >= 8 {
+		identityPrefix = sessionID[:8]
 	}
 
 	userInfo := struct {
@@ -233,7 +264,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		IP        string
 	}{
 		SessionID: sessionID,
-		Identity:  fmt.Sprintf("User-%s", sessionID[:8]),
+		Identity:  fmt.Sprintf("User-%s", identityPrefix),
 		Since:     memberSince,
 		Tier:      tier,
 		IP:        getRealIP(r),
@@ -259,13 +290,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		User:         userInfo,
 	}
 
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, "index.html", data); err != nil {
+		reqLog.Error("Failed to execute template", "error", err)
+		http.Error(w, "An internal error occurred", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-
-	if err := templates.ExecuteTemplate(w, "index.html", data); err != nil {
-		slog.Error("Failed to execute template", "error", err)
-	}
+	w.Write(buf.Bytes()) //nolint:errcheck
 }
 
 func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
@@ -279,10 +314,13 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	reqLog := slog.With("request_id", RequestIDFromCtx(ctx))
+
 	sessionID := getSessionID(w, r)
-	existing, err := db.GetMonitors(sessionID)
+	existing, err := db.GetMonitors(ctx, sessionID)
 	if err != nil {
-		slog.Error("Database error checking monitor quota", "sessionID", sessionID, "error", err)
+		reqLog.Error("Database error checking monitor quota", "sessionID", sessionID, "error", err)
 		http.Error(w, "System Temporarily Unavailable: Registry connection failure.", http.StatusServiceUnavailable)
 		return
 	}
@@ -316,7 +354,6 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 	statusPageURL := r.FormValue("status_page_url")
 	webhookURL := r.FormValue("webhook_url")
 
-	// Validate optional URLs against SSRF
 	if webhookURL != "" {
 		if err := IsSafeURL(webhookURL); err != nil {
 			http.Error(w, fmt.Sprintf("Webhook Security Restriction: %v", err), http.StatusForbidden)
@@ -330,27 +367,30 @@ func handleAddMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	m, err := db.CreateMonitor(sessionID, name, rawURL, statusPageURL, webhookURL)
+	m, err := db.CreateMonitor(ctx, sessionID, name, rawURL, statusPageURL, webhookURL)
 	if err != nil {
-		slog.Error("Failed to create monitor", "sessionID", sessionID, "url", rawURL, "error", err)
+		reqLog.Error("Failed to create monitor", "sessionID", sessionID, "url", rawURL, "error", err)
 		http.Error(w, "Transaction Failed: Infrastructure could not be provisioned.", http.StatusInternalServerError)
 		return
 	}
 
-	go func() {
-		monitor.PerformMonitorCheck(&m)
+	// Goroutine outlives the request — use its own context with timeout.
+	go func(m db.Monitor, rawURL string) {
+		gCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		monitor.PerformMonitorCheck(gCtx, &m)
 		if u, err := url.Parse(rawURL); err == nil && (u.Scheme == "https" || u.Scheme == "http") {
 			domain := u.Hostname()
 			if domain != "" {
-				s, err := db.CreateSSLCheck(m.ID, domain)
+				s, err := db.CreateSSLCheck(gCtx, m.ID, domain)
 				if err == nil {
-					monitor.CheckAndSaveSSL(s)
+					monitor.CheckAndSaveSSL(gCtx, s)
 					monitor.RegisterSSLCheck(s)
 				}
 			}
 		}
 		monitor.RegisterMonitor(m)
-	}()
+	}(m, rawURL)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Trigger", "registryUpdate")
@@ -372,6 +412,9 @@ func handleDeleteMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	reqLog := slog.With("request_id", RequestIDFromCtx(ctx))
+
 	sessionID := getSessionID(w, r)
 	id, err := strconv.Atoi(r.FormValue("id"))
 	if err != nil {
@@ -379,8 +422,8 @@ func handleDeleteMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.DeleteMonitor(id, sessionID); err != nil {
-		slog.Error("Failed to delete monitor", "id", id, "sessionID", sessionID, "error", err)
+	if err := db.DeleteMonitor(ctx, id, sessionID); err != nil {
+		reqLog.Error("Failed to delete monitor", "id", id, "sessionID", sessionID, "error", err)
 		http.Error(w, "Transaction Failed: Unable to decommission monitor.", http.StatusInternalServerError)
 		return
 	}

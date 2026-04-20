@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"pingtym/internal/db"
 	"pingtym/internal/notifier"
 	"sync"
@@ -11,32 +12,24 @@ import (
 )
 
 type LiveState struct {
-	mu             sync.RWMutex
-	FailureCounts  map[int]int         // monitorID -> consecutive failures
+	mu            sync.RWMutex
+	FailureCounts map[int]int // monitorID -> consecutive failures
 }
 
 var (
 	monitorContexts sync.Map // map[int]context.CancelFunc
 	sslContexts     sync.Map // map[int]context.CancelFunc (keyed by monitorID)
 	State           = &LiveState{
-		FailureCounts:  make(map[int]int),
+		FailureCounts: make(map[int]int),
 	}
 )
-
-// We only need to track failures for alerting. Memory history is now DB-backed.
-func (s *LiveState) updateMonitorState(id int, status int, result CheckResult) {
-	// Alert logic doesn't strictly need state updates here anymore, it's handled in PerformMonitorCheck.
-}
-
-func (s *LiveState) updateSaaSState(monitorID int, serviceName string, status string) {
-	// Memory history is now DB-backed. Let Vercel read it from there.
-}
 
 func StartEngine() {
 	slog.Info("Monitoring engine started...")
 	go startCleanupTask()
 
-	monitors, err := db.GetAllActiveMonitors()
+	ctx := context.Background()
+	monitors, err := db.GetAllActiveMonitors(ctx)
 	if err != nil {
 		slog.Error("Error fetching monitors", "error", err)
 	}
@@ -44,7 +37,7 @@ func StartEngine() {
 		RegisterMonitor(m)
 	}
 
-	sslChecks, err := db.GetAllActiveSSLChecks()
+	sslChecks, err := db.GetAllActiveSSLChecks(ctx)
 	if err != nil {
 		slog.Error("Error fetching SSL checks", "error", err)
 	}
@@ -55,36 +48,48 @@ func StartEngine() {
 
 func RunGlobalCheck() {
 	slog.Info("Executing global monitoring sweep...")
-	monitors, _ := db.GetAllActiveMonitors()
+	ctx := context.Background()
+
+	monitors, err := db.GetAllActiveMonitors(ctx)
+	if err != nil {
+		slog.Error("Failed to fetch monitors for global check", "error", err)
+	}
+
 	var wg sync.WaitGroup
-	var saasWg sync.WaitGroup // Tracks detached SaaS status goroutines
+	var saasWg sync.WaitGroup
 	for _, m := range monitors {
 		wg.Add(1)
 		go func(mon db.Monitor) {
 			defer wg.Done()
-			PerformMonitorCheck(&mon, &saasWg)
+			PerformMonitorCheck(ctx, &mon, &saasWg)
 		}(m)
 	}
-	sslChecks, _ := db.GetAllActiveSSLChecks()
+
+	sslChecks, err := db.GetAllActiveSSLChecks(ctx)
+	if err != nil {
+		slog.Error("Failed to fetch SSL checks for global check", "error", err)
+	}
 	for _, s := range sslChecks {
 		wg.Add(1)
 		go func(ssl db.SSLCheck) {
 			defer wg.Done()
-			CheckAndSaveSSL(ssl)
+			CheckAndSaveSSL(ctx, ssl)
 		}(s)
 	}
+
 	wg.Wait()
-	saasWg.Wait() // Critical: wait for all SaaS writes before returning (Vercel serverless)
+	saasWg.Wait()
 }
 
 func startCleanupTask() {
-	if err := db.PruneLogs(30); err != nil {
+	ctx := context.Background()
+	if err := db.PruneLogs(ctx, 30); err != nil {
 		slog.Error("Failed to prune logs", "error", err)
 	}
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := db.PruneLogs(30); err != nil {
+		if err := db.PruneLogs(ctx, 30); err != nil {
 			slog.Error("Failed to prune logs", "error", err)
 		}
 	}
@@ -99,12 +104,16 @@ func RegisterMonitor(m db.Monitor) {
 }
 
 func StopMonitor(id int) {
-	if cancel, ok := monitorContexts.Load(id); ok {
-		cancel.(context.CancelFunc)()
+	if v, ok := monitorContexts.Load(id); ok {
+		if fn, ok := v.(context.CancelFunc); ok {
+			fn()
+		}
 		monitorContexts.Delete(id)
 	}
-	if cancel, ok := sslContexts.Load(id); ok {
-		cancel.(context.CancelFunc)()
+	if v, ok := sslContexts.Load(id); ok {
+		if fn, ok := v.(context.CancelFunc); ok {
+			fn()
+		}
 		sslContexts.Delete(id)
 	}
 	State.mu.Lock()
@@ -119,7 +128,7 @@ func RegisterSSLCheck(s db.SSLCheck) {
 }
 
 func watchMonitor(ctx context.Context, m db.Monitor) {
-	PerformMonitorCheck(&m)
+	PerformMonitorCheck(ctx, &m)
 	interval := m.IntervalSeconds
 	if interval <= 0 {
 		interval = 60
@@ -131,7 +140,7 @@ func watchMonitor(ctx context.Context, m db.Monitor) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			PerformMonitorCheck(&m)
+			PerformMonitorCheck(ctx, &m)
 		}
 	}
 }
@@ -139,8 +148,8 @@ func watchMonitor(ctx context.Context, m db.Monitor) {
 // PerformMonitorCheck runs a full check for a single monitor.
 // saasWg (optional) is used by RunGlobalCheck to track SaaS goroutines in
 // serverless environments where the process exits after wg.Wait() returns.
-func PerformMonitorCheck(m *db.Monitor, saasWg ...*sync.WaitGroup) {
-	result := Ping(m.URL)
+func PerformMonitorCheck(ctx context.Context, m *db.Monitor, saasWg ...*sync.WaitGroup) {
+	result := Ping(ctx, m.URL)
 	status := 0
 	if result.Up {
 		status = 1
@@ -171,67 +180,81 @@ func PerformMonitorCheck(m *db.Monitor, saasWg ...*sync.WaitGroup) {
 
 	m.LastStatus.Valid = true
 	m.LastStatus.Int64 = int64(status)
-	State.updateMonitorState(m.ID, status, result)
 
-	if err := db.UpdateMonitorStatus(m.ID, status); err != nil {
+	if err := db.UpdateMonitorStatus(ctx, m.ID, status); err != nil {
 		slog.Error("Failed to update monitor status", "id", m.ID, "error", err)
 	}
-	if err := db.SaveLog(m.ID, status, int(result.Latency.Milliseconds()), int(result.DNS.Milliseconds()), int(result.TLS.Milliseconds()), int(result.TTFB.Milliseconds()), int(result.FullDuration.Milliseconds()), result.ErrorMessage); err != nil {
+	if err := db.SaveLog(ctx, m.ID, status, int(result.Latency.Milliseconds()), int(result.DNS.Milliseconds()), int(result.TLS.Milliseconds()), int(result.TTFB.Milliseconds()), int(result.FullDuration.Milliseconds()), result.ErrorMessage); err != nil {
 		slog.Error("Failed to save check log", "id", m.ID, "error", err)
 	}
 
-	// LATENCY FIX: Move SaaS checks off the critical monitoring path.
-	// If a saasWg is provided (e.g. from RunGlobalCheck in serverless), track the
-	// goroutine so it completes before the process exits.
 	if m.StatusPageURL.Valid && m.StatusPageURL.String != "" {
-		var wg *sync.WaitGroup
-		if len(saasWg) > 0 && saasWg[0] != nil {
-			wg = saasWg[0]
-			wg.Add(1)
+		pageURL := m.StatusPageURL.String
+		// Re-validate status page URL before fetching (defense-in-depth against DB tampering).
+		if u, err := url.Parse(pageURL); err != nil || validateSSRF(u) != nil {
+			slog.Warn("Skipping SaaS check: status page URL failed SSRF re-validation", "id", m.ID, "url", pageURL)
+		} else {
+			var wg *sync.WaitGroup
+			if len(saasWg) > 0 && saasWg[0] != nil {
+				wg = saasWg[0]
+				wg.Add(1)
+			}
+			go func(id int, pURL string) {
+				if wg != nil {
+					defer wg.Done()
+				}
+				statuses, err := CheckSaaSStatus(ctx, id, pURL)
+				if err != nil {
+					slog.Warn("Failed to check SaaS status", "id", id, "url", pURL, "error", err)
+					return
+				}
+				for _, s := range statuses {
+					if err := db.UpdateSaaSStatus(ctx, id, s.ServiceName, s.Status, s.Impact, s.LatestFix); err != nil {
+						slog.Error("Failed to update SaaS status", "id", id, "service", s.ServiceName, "error", err)
+					}
+					if err := db.SaveSaaSStatusLog(ctx, id, s.ServiceName, s.Status); err != nil {
+						slog.Error("Failed to save SaaS status log", "id", id, "service", s.ServiceName, "error", err)
+					}
+				}
+			}(m.ID, pageURL)
 		}
-		go func(id int, pageURL string) {
-			if wg != nil {
-				defer wg.Done()
-			}
-			statuses, err := CheckSaaSStatus(id, pageURL)
-			if err != nil {
-				slog.Warn("Failed to check SaaS status", "id", id, "url", pageURL, "error", err)
-				return
-			}
-			for _, s := range statuses {
-				State.updateSaaSState(id, s.ServiceName, s.Status)
-				if err := db.UpdateSaaSStatus(id, s.ServiceName, s.Status, s.Impact, s.LatestFix); err != nil {
-					slog.Error("Failed to update SaaS status", "id", id, "service", s.ServiceName, "error", err)
-				}
-				if err := db.SaveSaaSStatusLog(id, s.ServiceName, s.Status); err != nil {
-					slog.Error("Failed to save SaaS status log", "id", id, "service", s.ServiceName, "error", err)
-				}
-			}
-		}(m.ID, m.StatusPageURL.String)
 	}
 }
 
 func triggerAlert(m db.Monitor, status int, result CheckResult) {
+	if !m.WebhookURL.Valid || m.WebhookURL.String == "" {
+		return
+	}
+	// Re-validate webhook URL before sending (defense-in-depth against DB tampering).
+	u, err := url.Parse(m.WebhookURL.String)
+	if err != nil || validateSSRF(u) != nil {
+		slog.Error("Webhook URL failed SSRF re-validation, skipping alert", "id", m.ID, "url", m.WebhookURL.String)
+		return
+	}
+
 	statusStr := "DOWN"
 	if status == 1 {
 		statusStr = "UP"
 	}
-	if m.WebhookURL.Valid && m.WebhookURL.String != "" {
-		go func() {
-			alert := notifier.Alert{
-				MonitorName: m.Name,
-				URL:         m.URL,
-				Status:      statusStr,
-				Latency:     fmt.Sprintf("%dms", result.Latency.Milliseconds()),
-				Error:       result.ErrorMessage,
-			}
-			_ = notifier.SendAlert(m.WebhookURL.String, alert)
-		}()
-	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		alert := notifier.Alert{
+			MonitorName: m.Name,
+			URL:         m.URL,
+			Status:      statusStr,
+			Latency:     fmt.Sprintf("%dms", result.Latency.Milliseconds()),
+			Error:       result.ErrorMessage,
+		}
+		if err := notifier.SendAlert(ctx, m.WebhookURL.String, alert); err != nil {
+			slog.Error("Failed to send alert", "monitor", m.Name, "webhook", m.WebhookURL.String, "error", err)
+		}
+	}()
 }
 
 func watchSSL(ctx context.Context, s db.SSLCheck) {
-	CheckAndSaveSSL(s)
+	CheckAndSaveSSL(ctx, s)
 	ticker := time.NewTicker(12 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -239,14 +262,18 @@ func watchSSL(ctx context.Context, s db.SSLCheck) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			CheckAndSaveSSL(s)
+			CheckAndSaveSSL(ctx, s)
 		}
 	}
 }
 
-func CheckAndSaveSSL(s db.SSLCheck) {
+func CheckAndSaveSSL(ctx context.Context, s db.SSLCheck) {
 	expiry, err := CheckSSL(s.Domain)
-	if err == nil {
-		_ = db.UpdateSSLCheck(s.ID, expiry)
+	if err != nil {
+		slog.Error("SSL check failed", "domain", s.Domain, "error", err)
+		return
+	}
+	if err := db.UpdateSSLCheck(ctx, s.ID, expiry); err != nil {
+		slog.Error("Failed to save SSL expiry", "domain", s.Domain, "error", err)
 	}
 }

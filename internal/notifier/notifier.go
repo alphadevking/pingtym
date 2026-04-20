@@ -2,10 +2,13 @@ package notifier
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type NotificationType string
@@ -24,8 +27,9 @@ type Alert struct {
 	Error       string
 }
 
-func SendAlert(webhookURL string, alert Alert) error {
-	// For this MVP, we'll implement a generic JSON webhook (Slack/Discord style)
+var webhookClient = &http.Client{Timeout: 10 * time.Second}
+
+func SendAlert(ctx context.Context, webhookURL string, alert Alert) error {
 	payload := map[string]string{
 		"text": fmt.Sprintf("🚨 *Pingtym Alert* 🚨\n*Monitor:* %s\n*URL:* %s\n*Status:* %s\n*Latency:* %s\n*Error:* %s",
 			alert.MonitorName, alert.URL, alert.Status, alert.Latency, alert.Error),
@@ -36,11 +40,18 @@ func SendAlert(webhookURL string, alert Alert) error {
 		return fmt.Errorf("failed to marshal alert payload: %w", err)
 	}
 
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("failed to build webhook request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := webhookClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send alert: %w", err)
 	}
 	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
 
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook returned status: %d", resp.StatusCode)

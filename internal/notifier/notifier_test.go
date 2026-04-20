@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,15 +22,14 @@ func TestSendAlert(t *testing.T) {
 		}
 
 		// Decode the body to verify JSON structure
-		var payload map[string]interface{}
+		var payload map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Errorf("Failed to decode JSON body: %v", err)
 			return
 		}
 
-		// Check if "text" field exists (simple check)
-		if text, ok := payload["text"].(string); !ok || text == "" {
-			t.Error("Expected 'text' field in JSON payload")
+		if payload["text"] == "" {
+			t.Error("Expected non-empty 'text' field in JSON payload")
 		}
 
 		// Respond with success
@@ -48,5 +48,7 @@ func TestSendAlert(t *testing.T) {
 
 	// Call the function with the mock server URL
 	// We are mainly testing that this doesn't panic and hits our server correctly
-	SendAlert(server.URL, alert)
+	if err := SendAlert(context.Background(), server.URL, alert); err != nil {
+		t.Errorf("SendAlert returned unexpected error: %v", err)
+	}
 }

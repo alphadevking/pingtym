@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"time"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
@@ -13,6 +14,9 @@ import (
 )
 
 var DB *sql.DB
+
+// identifierRe guards columnExists against SQL injection via table/column names.
+var identifierRe = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
 type Monitor struct {
 	ID              int
@@ -91,7 +95,6 @@ func InitDB(dataSourceName string) error {
 		DB.SetConnMaxLifetime(time.Hour)
 	}
 
-	// Use context with timeout for initial handshake and table creation
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -103,8 +106,8 @@ func InitDB(dataSourceName string) error {
 		return fmt.Errorf("failed to create tables: %w", err)
 	}
 
-	if err := migrateSchema(); err != nil {
-		slog.Warn("Schema migration encountered errors", "error", err)
+	if err := migrateSchema(ctx); err != nil {
+		return fmt.Errorf("schema migration failed: %w", err)
 	}
 
 	slog.Info("Database initialized successfully", "driver", driverName)
@@ -173,7 +176,6 @@ func createTablesContext(ctx context.Context) error {
 		}
 	}
 
-	// Indices for high-performance multi-tenant lookups
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_monitors_session ON monitors(session_id)")
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_ssl_monitor ON ssl_checks(monitor_id)")
 	_, _ = DB.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS idx_check_logs_composite ON check_logs(monitor_id, created_at)")
@@ -182,24 +184,26 @@ func createTablesContext(ctx context.Context) error {
 	return nil
 }
 
-func migrateSchema() error {
+func migrateSchema(ctx context.Context) error {
 	if !columnExists("monitors", "created_at") {
-		_, err := DB.Exec("ALTER TABLE monitors ADD COLUMN created_at DATETIME")
-		if err != nil {
-			slog.Error("Failed to add created_at column", "error", err)
-		} else {
-			_, _ = DB.Exec("UPDATE monitors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+		if _, err := DB.ExecContext(ctx, "ALTER TABLE monitors ADD COLUMN created_at DATETIME"); err != nil {
+			return fmt.Errorf("add monitors.created_at: %w", err)
+		}
+		if _, err := DB.ExecContext(ctx, "UPDATE monitors SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"); err != nil {
+			slog.Warn("Failed to backfill monitors.created_at", "error", err)
 		}
 	}
 
-	columns := map[string]string{
+	monitorCols := map[string]string{
 		"session_id":      "TEXT NOT NULL DEFAULT 'legacy'",
 		"status_page_url": "TEXT",
 		"webhook_url":     "TEXT",
 	}
-	for col, definition := range columns {
+	for col, definition := range monitorCols {
 		if !columnExists("monitors", col) {
-			_, _ = DB.Exec(fmt.Sprintf("ALTER TABLE monitors ADD COLUMN %s %s", col, definition))
+			if _, err := DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE monitors ADD COLUMN %s %s", col, definition)); err != nil {
+				return fmt.Errorf("add monitors.%s: %w", col, err)
+			}
 		}
 	}
 
@@ -211,37 +215,44 @@ func migrateSchema() error {
 	}
 	for col, definition := range checkLogCols {
 		if !columnExists("check_logs", col) {
-			_, _ = DB.Exec(fmt.Sprintf("ALTER TABLE check_logs ADD COLUMN %s %s", col, definition))
+			if _, err := DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE check_logs ADD COLUMN %s %s", col, definition)); err != nil {
+				return fmt.Errorf("add check_logs.%s: %w", col, err)
+			}
 		}
 	}
 
 	if !columnExists("ssl_checks", "monitor_id") {
-		_, _ = DB.Exec("ALTER TABLE ssl_checks ADD COLUMN monitor_id INTEGER REFERENCES monitors(id) ON DELETE CASCADE")
+		if _, err := DB.ExecContext(ctx, "ALTER TABLE ssl_checks ADD COLUMN monitor_id INTEGER REFERENCES monitors(id) ON DELETE CASCADE"); err != nil {
+			return fmt.Errorf("add ssl_checks.monitor_id: %w", err)
+		}
 	}
 
 	return nil
 }
 
 func columnExists(tableName, columnName string) bool {
+	if !identifierRe.MatchString(tableName) || !identifierRe.MatchString(columnName) {
+		slog.Error("columnExists called with unsafe identifier", "table", tableName, "column", columnName)
+		return false
+	}
 	var name string
 	query := fmt.Sprintf("SELECT name FROM pragma_table_info('%s') WHERE name='%s'", tableName, columnName)
 	err := DB.QueryRow(query).Scan(&name)
 	return err == nil
 }
 
-func PruneLogs(days int) error {
+func PruneLogs(ctx context.Context, days int) error {
 	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
-	_, err := DB.Exec("DELETE FROM check_logs WHERE created_at < ?", cutoff)
-	if err != nil {
+	if _, err := DB.ExecContext(ctx, "DELETE FROM check_logs WHERE created_at < ?", cutoff); err != nil {
 		return err
 	}
-	_, err = DB.Exec("DELETE FROM saas_status_logs WHERE created_at < ?", cutoff)
+	_, err := DB.ExecContext(ctx, "DELETE FROM saas_status_logs WHERE created_at < ?", cutoff)
 	return err
 }
 
-func CreateMonitor(sessionID, name, url, statusPageURL, webhookURL string) (Monitor, error) {
+func CreateMonitor(ctx context.Context, sessionID, name, url, statusPageURL, webhookURL string) (Monitor, error) {
 	now := time.Now().UTC()
-	res, err := DB.Exec("INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+	res, err := DB.ExecContext(ctx, "INSERT INTO monitors (session_id, name, url, status_page_url, webhook_url, created_at) VALUES (?, ?, ?, ?, ?, ?)",
 		sessionID, name, url, statusPageURL, webhookURL, now)
 	if err != nil {
 		return Monitor{}, err
@@ -260,8 +271,8 @@ func CreateMonitor(sessionID, name, url, statusPageURL, webhookURL string) (Moni
 	}, nil
 }
 
-func GetMonitors(sessionID string) ([]Monitor, error) {
-	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors WHERE session_id = ?", sessionID)
+func GetMonitors(ctx context.Context, sessionID string) ([]Monitor, error) {
+	rows, err := DB.QueryContext(ctx, "SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors WHERE session_id = ?", sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -270,17 +281,16 @@ func GetMonitors(sessionID string) ([]Monitor, error) {
 	var monitors []Monitor
 	for rows.Next() {
 		var m Monitor
-		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt)
-		if err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		monitors = append(monitors, m)
 	}
-	return monitors, nil
+	return monitors, rows.Err()
 }
 
-func GetAllActiveMonitors() ([]Monitor, error) {
-	rows, err := DB.Query("SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors")
+func GetAllActiveMonitors(ctx context.Context) ([]Monitor, error) {
+	rows, err := DB.QueryContext(ctx, "SELECT id, session_id, name, url, interval_seconds, last_status, last_checked, status_page_url, webhook_url, created_at FROM monitors")
 	if err != nil {
 		return nil, err
 	}
@@ -289,36 +299,35 @@ func GetAllActiveMonitors() ([]Monitor, error) {
 	var monitors []Monitor
 	for rows.Next() {
 		var m Monitor
-		err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt)
-		if err != nil {
+		if err := rows.Scan(&m.ID, &m.SessionID, &m.Name, &m.URL, &m.IntervalSeconds, &m.LastStatus, &m.LastChecked, &m.StatusPageURL, &m.WebhookURL, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		monitors = append(monitors, m)
 	}
-	return monitors, nil
+	return monitors, rows.Err()
 }
 
-func DeleteMonitor(id int, sessionID string) error {
-	_, err := DB.Exec("DELETE FROM monitors WHERE id = ? AND session_id = ?", id, sessionID)
+func DeleteMonitor(ctx context.Context, id int, sessionID string) error {
+	_, err := DB.ExecContext(ctx, "DELETE FROM monitors WHERE id = ? AND session_id = ?", id, sessionID)
 	return err
 }
 
-func UpdateMonitorStatus(id int, status int) error {
-	_, err := DB.Exec("UPDATE monitors SET last_status = ?, last_checked = ? WHERE id = ?", status, time.Now().UTC(), id)
+func UpdateMonitorStatus(ctx context.Context, id int, status int) error {
+	_, err := DB.ExecContext(ctx, "UPDATE monitors SET last_status = ?, last_checked = ? WHERE id = ?", status, time.Now().UTC(), id)
 	return err
 }
 
-func SaveLog(monitorID int, status int, latency int, dnsMs, tlsMs, ttfbMs, totalMs int, errMsg string) error {
-	_, err := DB.Exec("INSERT INTO check_logs (monitor_id, status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+func SaveLog(ctx context.Context, monitorID int, status int, latency int, dnsMs, tlsMs, ttfbMs, totalMs int, errMsg string) error {
+	_, err := DB.ExecContext(ctx, "INSERT INTO check_logs (monitor_id, status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		monitorID, status, latency, dnsMs, tlsMs, ttfbMs, totalMs, errMsg)
 	return err
 }
 
-func GetRecentLogs(monitorID int, limit int) ([]CheckLog, error) {
-	rows, err := DB.Query(`
-		SELECT status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message 
-		FROM check_logs 
-		WHERE monitor_id = ? 
+func GetRecentLogs(ctx context.Context, monitorID int, limit int) ([]CheckLog, error) {
+	rows, err := DB.QueryContext(ctx, `
+		SELECT status, latency_ms, dns_ms, tls_ms, ttfb_ms, total_ms, error_message
+		FROM check_logs
+		WHERE monitor_id = ?
 		ORDER BY created_at DESC LIMIT ?`, monitorID, limit)
 	if err != nil {
 		return nil, err
@@ -350,13 +359,13 @@ func GetRecentLogs(monitorID int, limit int) ([]CheckLog, error) {
 		}
 		logs = append(logs, l)
 	}
-	return logs, nil
+	return logs, rows.Err()
 }
 
-func GetSSLChecks(sessionID string) ([]SSLCheck, error) {
-	rows, err := DB.Query(`SELECT s.id, s.monitor_id, s.domain, s.expiry_date, s.last_checked 
-		FROM ssl_checks s 
-		JOIN monitors m ON s.monitor_id = m.id 
+func GetSSLChecks(ctx context.Context, sessionID string) ([]SSLCheck, error) {
+	rows, err := DB.QueryContext(ctx, `SELECT s.id, s.monitor_id, s.domain, s.expiry_date, s.last_checked
+		FROM ssl_checks s
+		JOIN monitors m ON s.monitor_id = m.id
 		WHERE m.session_id = ?`, sessionID)
 	if err != nil {
 		return nil, err
@@ -371,11 +380,11 @@ func GetSSLChecks(sessionID string) ([]SSLCheck, error) {
 		}
 		checks = append(checks, c)
 	}
-	return checks, nil
+	return checks, rows.Err()
 }
 
-func GetAllActiveSSLChecks() ([]SSLCheck, error) {
-	rows, err := DB.Query("SELECT id, monitor_id, domain, expiry_date, last_checked FROM ssl_checks")
+func GetAllActiveSSLChecks(ctx context.Context) ([]SSLCheck, error) {
+	rows, err := DB.QueryContext(ctx, "SELECT id, monitor_id, domain, expiry_date, last_checked FROM ssl_checks")
 	if err != nil {
 		return nil, err
 	}
@@ -389,11 +398,11 @@ func GetAllActiveSSLChecks() ([]SSLCheck, error) {
 		}
 		checks = append(checks, c)
 	}
-	return checks, nil
+	return checks, rows.Err()
 }
 
-func CreateSSLCheck(monitorID int, domain string) (SSLCheck, error) {
-	res, err := DB.Exec("INSERT OR IGNORE INTO ssl_checks (monitor_id, domain) VALUES (?, ?)", monitorID, domain)
+func CreateSSLCheck(ctx context.Context, monitorID int, domain string) (SSLCheck, error) {
+	res, err := DB.ExecContext(ctx, "INSERT OR IGNORE INTO ssl_checks (monitor_id, domain) VALUES (?, ?)", monitorID, domain)
 	if err != nil {
 		return SSLCheck{}, err
 	}
@@ -401,15 +410,15 @@ func CreateSSLCheck(monitorID int, domain string) (SSLCheck, error) {
 	return SSLCheck{ID: int(id), MonitorID: monitorID, Domain: domain}, nil
 }
 
-func UpdateSSLCheck(id int, expiry time.Time) error {
-	_, err := DB.Exec("UPDATE ssl_checks SET expiry_date = ?, last_checked = ? WHERE id = ?", expiry, time.Now().UTC(), id)
+func UpdateSSLCheck(ctx context.Context, id int, expiry time.Time) error {
+	_, err := DB.ExecContext(ctx, "UPDATE ssl_checks SET expiry_date = ?, last_checked = ? WHERE id = ?", expiry, time.Now().UTC(), id)
 	return err
 }
 
-func GetUptimePercentage(monitorID int, duration time.Duration) (float64, error) {
+func GetUptimePercentage(ctx context.Context, monitorID int, duration time.Duration) (float64, error) {
 	since := time.Now().UTC().Add(-duration)
 	var total, up int
-	err := DB.QueryRow("SELECT COUNT(*), SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) FROM check_logs WHERE monitor_id = ? AND created_at > ?",
+	err := DB.QueryRowContext(ctx, "SELECT COUNT(*), SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) FROM check_logs WHERE monitor_id = ? AND created_at > ?",
 		monitorID, since).Scan(&total, &up)
 	if err != nil || total == 0 {
 		return 100.0, nil
@@ -417,10 +426,10 @@ func GetUptimePercentage(monitorID int, duration time.Duration) (float64, error)
 	return (float64(up) / float64(total)) * 100, nil
 }
 
-func GetAverageLatency(monitorID int, duration time.Duration) (int, error) {
+func GetAverageLatency(ctx context.Context, monitorID int, duration time.Duration) (int, error) {
 	since := time.Now().UTC().Add(-duration)
 	var avg sql.NullFloat64
-	err := DB.QueryRow("SELECT AVG(latency_ms) FROM check_logs WHERE monitor_id = ? AND created_at > ?",
+	err := DB.QueryRowContext(ctx, "SELECT AVG(latency_ms) FROM check_logs WHERE monitor_id = ? AND created_at > ?",
 		monitorID, since).Scan(&avg)
 	if err != nil || !avg.Valid {
 		return 0, nil
@@ -428,9 +437,9 @@ func GetAverageLatency(monitorID int, duration time.Duration) (int, error) {
 	return int(avg.Float64), nil
 }
 
-func UpdateSaaSStatus(monitorID int, serviceName, status, impact, latestFix string) error {
-	_, err := DB.Exec(`INSERT INTO saas_service_status 
-		(monitor_id, service_name, status, impact, latest_fix, last_checked) 
+func UpdateSaaSStatus(ctx context.Context, monitorID int, serviceName, status, impact, latestFix string) error {
+	_, err := DB.ExecContext(ctx, `INSERT INTO saas_service_status
+		(monitor_id, service_name, status, impact, latest_fix, last_checked)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(monitor_id, service_name) DO UPDATE SET
 		status = excluded.status, impact = excluded.impact, latest_fix = excluded.latest_fix, last_checked = excluded.last_checked`,
@@ -438,14 +447,14 @@ func UpdateSaaSStatus(monitorID int, serviceName, status, impact, latestFix stri
 	return err
 }
 
-func SaveSaaSStatusLog(monitorID int, serviceName, status string) error {
-	_, err := DB.Exec("INSERT INTO saas_status_logs (monitor_id, service_name, status) VALUES (?, ?, ?)",
+func SaveSaaSStatusLog(ctx context.Context, monitorID int, serviceName, status string) error {
+	_, err := DB.ExecContext(ctx, "INSERT INTO saas_status_logs (monitor_id, service_name, status) VALUES (?, ?, ?)",
 		monitorID, serviceName, status)
 	return err
 }
 
-func GetRecentSaaSLogStatuses(monitorID int, serviceName string, limit int) ([]string, error) {
-	rows, err := DB.Query(`SELECT status FROM saas_status_logs WHERE monitor_id = ? AND service_name = ? ORDER BY created_at DESC LIMIT ?`,
+func GetRecentSaaSLogStatuses(ctx context.Context, monitorID int, serviceName string, limit int) ([]string, error) {
+	rows, err := DB.QueryContext(ctx, `SELECT status FROM saas_status_logs WHERE monitor_id = ? AND service_name = ? ORDER BY created_at DESC LIMIT ?`,
 		monitorID, serviceName, limit)
 	if err != nil {
 		return nil, err
@@ -460,11 +469,11 @@ func GetRecentSaaSLogStatuses(monitorID int, serviceName string, limit int) ([]s
 		}
 		logs = append(logs, status)
 	}
-	return logs, nil
+	return logs, rows.Err()
 }
 
-func GetSaaSStatuses(monitorID int) ([]SaaSServiceStatus, error) {
-	rows, err := DB.Query("SELECT id, monitor_id, service_name, status, impact, latest_fix, last_checked FROM saas_service_status WHERE monitor_id = ?", monitorID)
+func GetSaaSStatuses(ctx context.Context, monitorID int) ([]SaaSServiceStatus, error) {
+	rows, err := DB.QueryContext(ctx, "SELECT id, monitor_id, service_name, status, impact, latest_fix, last_checked FROM saas_service_status WHERE monitor_id = ?", monitorID)
 	if err != nil {
 		return nil, err
 	}
@@ -478,5 +487,5 @@ func GetSaaSStatuses(monitorID int) ([]SaaSServiceStatus, error) {
 		}
 		statuses = append(statuses, s)
 	}
-	return statuses, nil
+	return statuses, rows.Err()
 }
